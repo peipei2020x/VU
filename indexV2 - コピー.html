@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ローカルビュアーアルティメット</title>
+    <style>
+        :root {
+            --menu-width: 340px; --bg: #111; --panel-bg: rgba(20, 20, 20, 0.95);
+            --primary: #0d6efd; --text: #eee; --border: #444;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg); color: var(--text); display: flex;
+            height: 100vh; width: 100vw; overflow: hidden;
+        }
+
+        /* --- Menu Panel --- */
+        #menu { position: fixed; top: 0; left: 0; width: var(--menu-width); height: 100%; background: var(--panel-bg); backdrop-filter: blur(12px); z-index: 200; transform: translateX(calc(-1 * var(--menu-width))); transition: transform 0.3s ease; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
+        #menu.visible { transform: translateX(0); }
+        #menu-toggle { position: fixed; top: 15px; left: 15px; background: var(--primary); color: white; border: none; border-radius: 50%; width: 40px; height: 40px; font-size: 20px; cursor: pointer; z-index: 201; display: flex; justify-content: center; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.5); transition: transform 0.3s ease; }
+        #menu.visible + #menu-toggle { transform: translateX(var(--menu-width)); }
+        #menu-content { padding: 20px; overflow-y: auto; flex-grow: 1; }
+        #menu-footer { padding: 15px 20px; border-top: 1px solid var(--border); }
+        h2,h3 { text-align: center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+        h3 { cursor: pointer; user-select: none; } h3::after { content: ' ▼'; font-size: 0.8em; } h3.collapsed::after { content: ' ▶'; }
+        .control-group { margin-bottom: 15px; }
+        .control-group label { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 14px; color: #bbb; }
+        button, select { width: 100%; padding: 10px; border: 1px solid #555; border-radius: 5px; background: #333; color: var(--text); cursor: pointer; font-size: 14px; }
+        button:hover { background: #444; } button:disabled { background: #222; color: #777; cursor: not-allowed; }
+        input[type="range"] { flex-grow: 1; padding: 0; accent-color: var(--primary); }
+        
+        /* Folder & Filter Styles */
+        #folder-list { max-height: 150px; overflow-y: auto; border: 1px solid #555; border-radius: 5px; padding: 10px; font-size: 13px; transition: max-height 0.3s, padding 0.3s, border 0.3s; }
+        #folder-list.collapsed { max-height: 0; padding: 0 10px; border-color: transparent; }
+        #folder-list label { margin-bottom: 5px; }
+        #color-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+        .color-chip-wrapper { display: flex; align-items: center; gap: 5px; background: #2a2a2a; border-radius: 15px; padding: 2px 8px 2px 2px; cursor: pointer; border: 1px solid #444; }
+        .color-chip-wrapper.selected { border-color: var(--primary); }
+        .color-chip { width: 20px; height: 20px; border-radius: 50%; font-size: 12px; display:flex; justify-content:center; align-items:center; }
+        .color-count { font-size: 12px; color: #aaa; }
+        #filter-controls { border: 1px solid var(--border); border-radius: 5px; padding: 10px; margin-top: 10px; }
+        #filter-controls.disabled { opacity: 0.5; pointer-events: none; }
+        .reset-btn { background:none; border:none; color: #aaa; cursor:pointer; padding: 0 5px; font-size: 18px; }
+        #skin-ratio-mode-toggle { font-size: 12px; padding: 2px 6px; width: auto; }
+
+        /* --- Main Viewer --- */
+        #viewer { flex-grow: 1; height: 100%; position: relative; overflow: hidden; }
+        .view-container { width: 100%; height: 100%; display: none; }
+        .view-container.active { display: flex; justify-content: center; align-items: center; }
+        #single-view { position: relative; } #single-image { width: 100%; height: 100%; object-fit: contain; }
+        .panel-view { gap: 10px; padding: 10px; }
+        .panel { width: 33.333%; height: 100%; } .panel img { width: 100%; height: 100%; object-fit: cover; background: #222; border-radius: 8px; }
+        
+        /* Ambiance View */
+        #ambiance-view { background: #000; }
+        .ambiance-img { position: absolute; width: 100%; height: 100%; object-fit: contain; transition: opacity 2s ease-in-out; opacity: 0; }
+        .ambiance-img.visible { opacity: 1; }
+        
+        /* Zoom Modal */
+        #zoom-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+        #zoom-modal.visible { opacity: 1; pointer-events: all; }
+        #zoom-image { max-width: 95vw; max-height: 95vh; cursor: grab; transition: transform 0.2s; }
+        #zoom-controls { position: absolute; top: 10px; right: 10px; display: flex; gap: 10px; }
+        #zoom-controls button { width: auto; padding: 8px 12px; }
+        
+        /* Gacha & Info */
+        #gacha-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 999; display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+        #gacha-overlay.visible { opacity: 1; pointer-events: all; }
+        #gacha-result { text-align: center; } #gacha-image { max-width: 80vw; max-height: 80vh; border-radius: 10px; } #gacha-rarity { font-size: 4em; font-weight: bold; color: white; margin-top: 20px; text-shadow: 0 0 20px black; }
+        .gacha-spin { animation: gachaSpin 1s ease-out; } .gacha-rare { animation: gachaRare 2s ease-in-out; box-shadow: 0 0 30px 10px gold; } .gacha-super-rare { animation: gachaSuperRare 2.5s ease-in-out; box-shadow: 0 0 40px 15px deeppink; }
+        @keyframes gachaSpin { 0% { transform: rotate(0) scale(0); } 100% { transform: rotate(720deg) scale(1); } } @keyframes gachaRare { from { filter: brightness(5) saturate(5); } to { filter: brightness(1) saturate(1); } } @keyframes gachaSuperRare { from { filter: brightness(10) saturate(10) hue-rotate(360deg); } to { filter: brightness(1) saturate(1) hue-rotate(0deg); } }
+        #filename-display { display: flex; align-items: center; gap: 8px; position: fixed; bottom: 10px; right: 10px; background: var(--panel-bg); padding: 8px 15px; border-radius: 5px; font-size: 14px; z-index: 100; max-width: 50%; }
+        #filename-text { flex-grow: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #exclude-folder-btn { background: #ff4444; border: none; border-radius: 3px; cursor: pointer; padding: 2px 5px; font-size: 10px; flex-shrink: 0; }
+        #progress-indicator { font-size: 12px; color: #aaa; text-align: center; height: 16px; }
+    </style>
+</head>
+<body>
+    <div id="menu">
+        <div id="menu-content">
+            <h2>Viewer Ultimate</h2>
+            <div class="control-group"><label>1. フォルダ選択</label><input type="file" id="folder-input" webkitdirectory directory></div>
+            <div class="control-group"><h3 id="folder-list-toggle">表示するフォルダ</h3><div id="folder-list">ここにフォルダが表示されます</div></div>
+            <div class="control-group"><label for="display-mode">表示モード</label><select id="display-mode"><option value="all">オール</option><option value="ambiance">アンビアンス</option><option value="folder-three">フォルダ3連</option><option value="random-three">ランダム3連</option><option value="horizontal">横長画像</option><option value="vertical">縦長画像</option></select></div>
+            <div id="slideshow-controls" class="control-group"><label>スライドショー</label><button id="play-pause-btn">再生</button><button id="shuffle-btn" style="margin-top:5px;">シャッフル OFF</button></div>
+            <div class="control-group"><label for="interval-slider">再生間隔: <span id="interval-value">3</span>秒</label><input type="range" id="interval-slider" min="0.5" max="10" step="0.5" value="3"></div>
+             <div class="control-group">
+                <h3>フィルター</h3><label><input type="checkbox" id="filename-visible-check"> ファイル名を表示</label>
+                <label><input type="checkbox" id="filter-enable-check"> フィルターを有効にする</label>
+                <div id="filter-controls" class="disabled">
+                    <label>└ (分析済みの画像に適用)</label>
+                    <label for="skin-ratio-filter">肌の露出度 <button id="skin-ratio-mode-toggle">以上</button><span id="skin-ratio-value">0</span>%<button class="reset-btn" id="reset-skin-btn">⟳</button></label><input type="range" id="skin-ratio-filter" min="0" max="100" value="0">
+                    <label style="margin-top:10px;">アクセントカラー</label><div id="color-filters"></div>
+                    <button id="apply-filters-btn" style="margin-top:10px;">フィルター適用</button>
+                </div>
+            </div>
+        </div>
+        <div id="menu-footer"><button id="gacha-btn" disabled>ガチャを回す！</button><div id="progress-indicator"></div></div>
+    </div>
+    <button id="menu-toggle">≡</button>
+
+    <main id="viewer">
+        <div id="single-view" class="view-container"><img id="single-image" src="" alt=""></div>
+        <div id="ambiance-view" class="view-container"><img class="ambiance-img" data-index="0"><img class="ambiance-img" data-index="1"></div>
+        <div id="folder-three-view" class="view-container panel-view"><div class="panel"><img data-index="0"></div><div class="panel"><img data-index="1"></div><div class="panel"><img data-index="2"></div></div>
+        <div id="random-three-view" class="view-container panel-view"><div class="panel"><img data-index="0"></div><div class="panel"><img data-index="1"></div><div class="panel"><img data-index="2"></div></div>
+    </main>
+    <div id="zoom-modal"><div id="zoom-controls"><button id="fullscreen-btn">全画面</button><button id="zoom-close-btn">閉じる</button></div><img id="zoom-image" src=""></div>
+    <div id="gacha-overlay"><div id="gacha-result"><img id="gacha-image"><h1 id="gacha-rarity"></h1></div></div>
+    <div id="filename-display" style="display:none;"><span id="filename-text"></span><button id="exclude-folder-btn" title="このフォルダを除外">✖</button></div>
+
+    <script>
+    const workerCode = `function rgbToHsv(r,g,b){r/=255,g/=255,b/=255;const max=Math.max(r,g,b),min=Math.min(r,g,b);let h,s,v=max;const d=max-min;if(s=0===max?0:d/max,max===min)h=0;else{switch(max){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;case b:h=(r-g)/d+4}h/=6}return{h:360*h,s:s,v:v}}function getColorCategory(r,g,b){const{h:h,s:s,v:v}=rgbToHsv(r,g,b);return s<.1?"無彩色":v<.2?"黒系":s>.8&&v>.8?h<30||h>=330?"赤系":h<60?"黄系":h<150?"緑系":h<210?"シアン系":h<270?"青系":h<330?"マゼンタ系":"-":h<30||h>=330?"茶/赤系":h<60?"黄/肌色系":h<150?"緑系":h<210?"シアン系":h<270?"青系":h<330?"紫系":"-"}self.onmessage=async({data:{files:files}})=>{let e=0;const t=files.length;for(const s of files){try{const a=await createImageBitmap(s),n=function(e){const{width:t,height:s}=e,a=t/s,n=100,o=Math.round(s*n/t),r=new OffscreenCanvas(n,o),i=r.getContext("2d"),c=.1*t,l=.1*s,h=.8*t,d=.8*s;i.drawImage(e,c,l,h,d,0,0,n,o);const m=i.getImageData(0,0,n,o).data;let p=0;const g=new Set;for(let e=0;e<m.length;e+=4){const t=m[e],s=m[e+1],a=m[e+2];t>95&&s>40&&a>20&&t>s&&t>a&&Math.abs(t-s)>15&&Math.max(t,s,a)-Math.min(t,s,a)>15&&p++;const n=getColorCategory(t,s,a);"-"!==n&&"無彩色"!==n&&g.add(n)}return{skinRatio:p/n/o,aspectRatio:a,colorCategories:Array.from(g).slice(0,2)}}(a);a.close(),self.postMessage({type:"result",path:s.webkitRelativePath,features:n})}catch(e){}e++,self.postMessage({type:"progress",processed:e,total:t})}};`;
+
+    (function() {
+        const state = {
+            allImages: [], filteredImages: [],
+            allFolders: new Set(), selectedFolders: new Set(),
+            analyzedCount: 0,
+            currentIndex: 0, displayMode: 'all',
+            isSlideshow: false, slideshowInterval: null, slideshowSpeed: 3000, isShuffle: false,
+            isFilterEnabled: false, isFilenameVisible: false,
+            filters: { skinRatio: 0, skinRatioMode: 'more', colorCategory: null },
+            urlCache: new Map(), worker: null,
+            ambiance: { currentImageIndex: 0 }
+        };
+
+        const dom = {
+            menu: document.getElementById('menu'), menuToggle: document.getElementById('menu-toggle'),
+            folderInput: document.getElementById('folder-input'), folderList: document.getElementById('folder-list'), folderListToggle: document.getElementById('folder-list-toggle'),
+            displayModeSelect: document.getElementById('display-mode'),
+            slideshowControls: document.getElementById('slideshow-controls'), playPauseBtn: document.getElementById('play-pause-btn'), shuffleBtn: document.getElementById('shuffle-btn'),
+            intervalSlider: document.getElementById('interval-slider'), intervalValue: document.getElementById('interval-value'),
+            filterEnableCheck: document.getElementById('filter-enable-check'), filterControls: document.getElementById('filter-controls'),
+            skinRatioFilter: document.getElementById('skin-ratio-filter'), skinRatioValue: document.getElementById('skin-ratio-value'), skinRatioModeToggle: document.getElementById('skin-ratio-mode-toggle'), resetSkinBtn: document.getElementById('reset-skin-btn'),
+            colorFilters: document.getElementById('color-filters'), applyFiltersBtn: document.getElementById('apply-filters-btn'), filenameVisibleCheck: document.getElementById('filename-visible-check'),
+            gachaBtn: document.getElementById('gacha-btn'),
+            viewContainers: document.querySelectorAll('.view-container'),
+            single: { view: document.getElementById('single-view'), img: document.getElementById('single-image') },
+            ambiance: { view: document.getElementById('ambiance-view'), imgs: document.querySelectorAll('.ambiance-img') },
+            folderThree: { view: document.getElementById('folder-three-view'), imgs: document.querySelectorAll('#folder-three-view img')},
+            randomThree: { view: document.getElementById('random-three-view'), imgs: document.querySelectorAll('#random-three-view img')},
+            zoom: { modal: document.getElementById('zoom-modal'), img: document.getElementById('zoom-image'), closeBtn: document.getElementById('zoom-close-btn'), fullscreenBtn: document.getElementById('fullscreen-btn') },
+            gacha: { overlay: document.getElementById('gacha-overlay'), result: document.getElementById('gacha-result'), img: document.getElementById('gacha-image'), rarity: document.getElementById('gacha-rarity') },
+            progressIndicator: document.getElementById('progress-indicator'),
+            filenameDisplay: document.getElementById('filename-display'), filenameText: document.getElementById('filename-text'), excludeFolderBtn: document.getElementById('exclude-folder-btn'),
+        };
+
+        function init() {
+            const blob = new Blob([workerCode], { type: 'application/javascript' });
+            state.worker = new Worker(URL.createObjectURL(blob));
+            state.worker.onmessage = handleWorkerMessage;
+            setupEventListeners();
+        }
+
+        function setupEventListeners() {
+            dom.menuToggle.addEventListener('click', () => dom.menu.classList.toggle('visible'));
+            dom.folderInput.addEventListener('change', handleFolderSelection);
+            dom.folderListToggle.addEventListener('click', (e) => { e.target.classList.toggle('collapsed'); dom.folderList.classList.toggle('collapsed'); });
+            dom.displayModeSelect.addEventListener('change', handleDisplayModeChange);
+            dom.playPauseBtn.addEventListener('click', toggleSlideshow);
+            dom.shuffleBtn.addEventListener('click', toggleShuffle);
+            dom.intervalSlider.addEventListener('input', handleIntervalChange);
+            dom.filenameVisibleCheck.addEventListener('change', (e) => { state.isFilenameVisible = e.target.checked; dom.filenameDisplay.style.display = state.isFilenameVisible ? 'flex' : 'none'; });
+            dom.filterEnableCheck.addEventListener('change', (e) => { state.isFilterEnabled = e.target.checked; dom.filterControls.classList.toggle('disabled', !state.isFilterEnabled); if (!state.isFilterEnabled) applyFiltersAndRender(); });
+            dom.applyFiltersBtn.addEventListener('click', () => applyFiltersAndRender());
+            dom.skinRatioFilter.addEventListener('input', () => { state.filters.skinRatio = dom.skinRatioFilter.value / 100; dom.skinRatioValue.textContent = `${dom.skinRatioFilter.value}`; });
+            dom.skinRatioModeToggle.addEventListener('click', () => { state.filters.skinRatioMode = state.filters.skinRatioMode === 'more' ? 'less' : 'more'; dom.skinRatioModeToggle.textContent = state.filters.skinRatioMode === 'more' ? '以上' : '以下'; });
+            dom.resetSkinBtn.addEventListener('click', () => { dom.skinRatioFilter.value = 0; dom.skinRatioFilter.dispatchEvent(new Event('input')); });
+            dom.gachaBtn.addEventListener('click', startGacha);
+            dom.gacha.overlay.addEventListener('click', () => dom.gacha.overlay.classList.remove('visible'));
+            dom.excludeFolderBtn.addEventListener('click', handleExcludeFolder);
+            document.addEventListener('keydown', (e) => { if (e.target.tagName !== 'INPUT' && !dom.zoom.modal.classList.contains('visible')) { if(e.key === 'ArrowRight') moveNext(1); if(e.key === 'ArrowLeft') moveNext(-1); if(e.key === ' ' && state.displayMode !== 'flow-view') {e.preventDefault(); toggleSlideshow();} } });
+            document.getElementById('viewer').addEventListener('dblclick', (e) => { if(e.target.tagName === 'IMG' && e.target.src) openZoomModal(e.target.src); });
+            dom.zoom.closeBtn.addEventListener('click', closeZoomModal);
+            dom.zoom.fullscreenBtn.addEventListener('click', () => dom.zoom.modal.requestFullscreen());
+            setupZoomPan(dom.zoom.img);
+        }
+
+        async function handleFolderSelection(e) {
+            const files = Array.from(e.target.files).filter(f => f.size > 0 && /\.(jpg|jpeg|png|gif|webp)$/i.test(f.name));
+            if (!files.length) return; resetState();
+            state.allImages = files.map(file => {
+                const path = file.webkitRelativePath; const folderPath = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : '(ルート)';
+                state.allFolders.add(folderPath); return { path, file, features: null, folderPath };
+            });
+            state.selectedFolders = new Set(state.allFolders);
+            updateFolderListUI(); state.worker.postMessage({ files }); applyFiltersAndRender();
+        }
+        
+        function handleWorkerMessage({ data }) {
+            switch(data.type) {
+                case 'progress': dom.progressIndicator.textContent = `分析中: ${data.processed} / ${data.total}`; break;
+                case 'result':
+                    state.analyzedCount++; const image = state.allImages.find(img => img.path === data.path);
+                    if (image) image.features = data.features;
+                    if (state.analyzedCount > 0) dom.gachaBtn.disabled = false;
+                    updateColorFilterUI();
+                    break;
+            }
+        }
+        
+        function handleDisplayModeChange() { state.displayMode = dom.displayModeSelect.value; applyFiltersAndRender(); }
+        function handleIntervalChange() { state.slideshowSpeed = dom.intervalSlider.value * 1000; updateUIVisibility(); if (state.isSlideshow) { stopSlideshow(); startSlideshow(); } }
+        function handleExcludeFolder() { const currentImage = state.filteredImages[state.currentIndex]; if (!currentImage) return; state.selectedFolders.delete(currentImage.folderPath); updateFolderListUI(); applyFiltersAndRender(); }
+
+        function applyFiltersAndRender() {
+            const wasSlideshowPlaying = state.isSlideshow;
+            stopSlideshow();
+
+            let images = state.allImages.filter(img => state.selectedFolders.has(img.folderPath));
+            if (state.isFilterEnabled) {
+                const { skinRatio, skinRatioMode, colorCategory } = state.filters;
+                images = images.filter(img => {
+                    if (!img.features) return false;
+                    if (skinRatioMode === 'more' ? img.features.skinRatio < skinRatio : img.features.skinRatio > skinRatio) return false;
+                    if (colorCategory && !img.features.colorCategories.includes(colorCategory)) return false;
+                    return true;
+                });
+            }
+            if (state.displayMode === 'horizontal') images = images.filter(img => img.features && img.features.aspectRatio >= 1);
+            if (state.displayMode === 'vertical') images = images.filter(img => img.features && img.features.aspectRatio < 1);
+            
+            if (state.isShuffle) shuffleArray(images);
+            else images.sort((a,b) => a.path.localeCompare(b.path));
+            
+            state.filteredImages = images;
+            state.currentIndex = 0;
+            render();
+            if (wasSlideshowPlaying) startSlideshow();
+        }
+
+        function resetState() {
+            stopSlideshow(); state.allImages = []; state.allFolders.clear(); state.selectedFolders.clear(); state.analyzedCount = 0;
+            state.urlCache.forEach(URL.revokeObjectURL); state.urlCache.clear();
+            dom.gachaBtn.disabled = true; dom.filterEnableCheck.checked = false; state.isFilterEnabled = false;
+            dom.filterControls.classList.add('disabled'); dom.colorFilters.innerHTML = ''; dom.folderList.innerHTML = 'ここにフォルダが表示されます';
+            dom.progressIndicator.textContent = '';
+        }
+
+        function toggleSlideshow() { if (state.isSlideshow) stopSlideshow(); else startSlideshow(); }
+        function startSlideshow() {
+            state.isSlideshow = true; dom.playPauseBtn.textContent = '停止';
+            moveNext(0);
+            state.slideshowInterval = setInterval(() => moveNext(1), state.slideshowSpeed);
+        }
+        function stopSlideshow() {
+            clearInterval(state.slideshowInterval); state.slideshowInterval = null;
+            state.isSlideshow = false; dom.playPauseBtn.textContent = '再生';
+        }
+        function toggleShuffle() { state.isShuffle = !state.isShuffle; dom.shuffleBtn.textContent = `シャッフル ${state.isShuffle ? 'ON' : 'OFF'}`; applyFiltersAndRender(); }
+        function moveNext(direction) { if (state.filteredImages.length === 0) return; state.currentIndex = (state.currentIndex + direction + state.filteredImages.length) % state.filteredImages.length; render(true); }
+
+        function startGacha() {
+            const analyizedImages = state.allImages.filter(img => img.features); if (!analyizedImages.length) return;
+            const targetImage = analyizedImages[Math.floor(Math.random() * analyizedImages.length)]; const { skinRatio } = targetImage.features;
+            let rarity = 'NORMAL'; let rarityClass = 'gacha-spin';
+            if (skinRatio > 0.3) { rarity = 'SUPER RARE!!'; rarityClass += ' gacha-super-rare'; }
+            else if (skinRatio > 0.15) { rarity = 'RARE!'; rarityClass += ' gacha-rare'; }
+            dom.gacha.img.src = getImageUrl(targetImage); dom.gacha.rarity.textContent = rarity; dom.gacha.result.className = rarityClass; dom.gacha.overlay.classList.add('visible');
+        }
+
+        function render(isNavigating = false) {
+            dom.viewContainers.forEach(c => c.classList.remove('active')); updateUIVisibility();
+
+            const { filteredImages, displayMode } = state;
+            
+            const renderActions = {
+                'all': renderSingleView,
+                'horizontal': renderSingleView,
+                'vertical': renderSingleView,
+                'ambiance': renderAmbianceView,
+                'folder-three': renderFolderThreeView,
+                'random-three': renderRandomThreeView
+            };
+            
+            const action = renderActions[displayMode];
+            if (action) {
+                if (isNavigating || !state.isSlideshow || ['folder-three', 'random-three'].includes(displayMode)) {
+                    action(filteredImages);
+                }
+            }
+            updateFilenameDisplay();
+        }
+        
+        function renderSingleView(images) { dom.single.view.classList.add('active'); const image = images[state.currentIndex]; dom.single.img.src = image ? getImageUrl(image) : ''; }
+        function renderAmbianceView(images) {
+            dom.ambiance.view.classList.add('active');
+            if(images.length === 0) return;
+            const currentImgEl = dom.ambiance.imgs[state.ambiance.currentImageIndex];
+            const nextImgEl = dom.ambiance.imgs[(state.ambiance.currentImageIndex + 1) % 2];
+            const nextImage = images[state.currentIndex];
+            if(!nextImage) return;
+            nextImgEl.src = getImageUrl(nextImage);
+            currentImgEl.classList.remove('visible');
+            nextImgEl.classList.add('visible');
+            state.ambiance.currentImageIndex = (state.ambiance.currentImageIndex + 1) % 2;
+        }
+        function renderFolderThreeView(images) {
+            dom.folderThree.view.classList.add('active');
+            const currentImage = images[state.currentIndex];
+            if(!currentImage) { dom.folderThree.imgs.forEach(img => { img.src = ''; img.dataset.path = ''; }); return; }
+            const sameFolderImages = state.allImages.filter(img => img.folderPath === currentImage.folderPath && img.path !== currentImage.path);
+            shuffleArray(sameFolderImages);
+            const displayImages = [currentImage, ...sameFolderImages.slice(0, 2)];
+            dom.folderThree.imgs.forEach((img, i) => { const image = displayImages[i]; img.src = image ? getImageUrl(image) : ''; img.dataset.path = image ? image.path : ''; });
+        }
+        function renderRandomThreeView(images) {
+            dom.randomThree.view.classList.add('active');
+            dom.randomThree.imgs.forEach((img) => {
+                const randomImage = images.length > 0 ? images[Math.floor(Math.random() * images.length)] : null;
+                img.src = randomImage ? getImageUrl(randomImage) : ''; img.dataset.path = randomImage ? randomImage.path : '';
+            });
+        }
+        
+        function updateUIVisibility() {
+            dom.slideshowControls.style.display = 'block';
+            dom.intervalSlider.previousElementSibling.textContent = `再生間隔: ${dom.intervalSlider.value}秒`;
+        }
+        function updateFolderListUI() {
+            dom.folderList.innerHTML = ''; [...state.allFolders].sort().forEach(folderPath => {
+                const id = `folder-${folderPath.replace(/[^a-zA-Z0-9]/g, '')}`; const label = document.createElement('label'); label.htmlFor = id;
+                const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.id = id; checkbox.checked = state.selectedFolders.has(folderPath);
+                checkbox.onchange = () => { if (checkbox.checked) state.selectedFolders.add(folderPath); else state.selectedFolders.delete(folderPath); applyFiltersAndRender(); };
+                label.appendChild(checkbox); label.append(folderPath); dom.folderList.appendChild(label);
+            });
+        }
+        function updateColorFilterUI() {
+            const images = state.allImages.filter(img => state.selectedFolders.has(img.folderPath));
+            const colorCounts = {}; images.filter(img => img.features).forEach(img => img.features.colorCategories.forEach(cat => colorCounts[cat] = (colorCounts[cat] || 0) + 1));
+            dom.colorFilters.innerHTML = '';
+            Object.entries(colorCounts).sort((a,b)=>b[1]-a[1]).forEach(([category, count]) => {
+                const wrapper = document.createElement('div'); wrapper.className = 'color-chip-wrapper'; if (category === state.filters.colorCategory) wrapper.classList.add('selected');
+                wrapper.onclick = () => { if (wrapper.classList.contains('selected')) { state.filters.colorCategory = null; } else { state.filters.colorCategory = category; } updateColorFilterUI(); };
+                const chip = document.createElement('div'); chip.className = 'color-chip'; chip.textContent = category[0]; chip.style.background = `hsl(${Math.random()*360}, 50%, 30%)`;
+                const countSpan = document.createElement('span'); countSpan.className = 'color-count'; countSpan.textContent = `(${count})`;
+                wrapper.appendChild(chip); wrapper.append(category); wrapper.appendChild(countSpan); dom.colorFilters.appendChild(wrapper);
+            });
+        }
+        function updateFilenameDisplay() {
+            let textContent = '画像なし', titleContent = '画像なし';
+            if (['folder-three', 'random-three'].includes(state.displayMode)) {
+                const imgs = state.displayMode === 'folder-three' ? dom.folderThree.imgs : dom.randomThree.imgs;
+                const paths = [...imgs].map(img => img.dataset.path?.split('/').pop()).filter(Boolean);
+                if (paths.length > 0) { textContent = paths.join(', '); titleContent = paths.join('\n'); }
+            } else {
+                const currentImage = state.filteredImages[state.currentIndex];
+                if (currentImage) { const name = currentImage.path.split('/').pop(); textContent = name; titleContent = name; }
+            }
+            dom.filenameText.textContent = textContent; dom.filenameDisplay.title = titleContent;
+            dom.excludeFolderBtn.style.display = state.filteredImages[state.currentIndex] ? 'block' : 'none';
+        }
+        function openZoomModal(src) { dom.zoom.img.src = src; dom.zoom.modal.classList.add('visible'); dom.zoom.img.style.transform = 'scale(1) translate(0, 0)'; }
+        function closeZoomModal() { dom.zoom.modal.classList.remove('visible'); }
+        function setupZoomPan(el) {
+            let scale = 1, panning = false, pointX = 0, pointY = 0, start = { x: 0, y: 0 };
+            const setTransform = () => el.style.transform = `scale(${scale}) translate(${pointX}px, ${pointY}px)`;
+            el.onmousedown = (e) => { e.preventDefault(); start = { x: e.clientX - pointX, y: e.clientY - pointY }; panning = true; el.style.cursor = 'grabbing'; };
+            el.onmouseup = () => { panning = false; el.style.cursor = 'grab'; };
+            el.onmousemove = (e) => { if (panning) { pointX = e.clientX - start.x; pointY = e.clientY - start.y; setTransform(); } };
+            el.onwheel = (e) => { e.preventDefault(); const delta = e.deltaY > 0 ? -0.2 : 0.2; scale = Math.max(1, scale + delta); setTransform(); };
+        }
+        function getImageUrl(image) {
+            if (!image) return ''; if (state.urlCache.has(image.path)) return state.urlCache.get(image.path);
+            const url = URL.createObjectURL(image.file); state.urlCache.set(image.path, url);
+            if (state.urlCache.size > 300) { const oldest = state.urlCache.keys().next().value; URL.revokeObjectURL(state.urlCache.get(oldest)); state.urlCache.delete(oldest); } return url;
+        }
+        function shuffleArray(array) { for (let i = array.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [array[i], array[j]] = [array[j], array[i]]; } }
+        
+        init();
+    })();
+    </script>
+</body>
+</html>
