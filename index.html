@@ -3,11 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ローカルビュアーアルティメット</title>
+    <title>ローカルビュアーアルティメット (改 v12.4)</title>
     <style>
         :root {
             --menu-width: 340px; --bg: #111; --panel-bg: rgba(20, 20, 20, 0.95);
-            --primary: #0d6efd; --text: #eee; --border: #444;
+            --primary: #0d6efd; --text: #eee; --border: #444; --highlight-bg: rgba(13, 110, 253, 0.2);
+            --selected-folder-highlight: rgba(13, 110, 253, 0.15);
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -19,25 +20,33 @@
         /* --- Menu Panel --- */
         #menu { position: fixed; top: 0; left: 0; width: var(--menu-width); height: 100%; background: var(--panel-bg); backdrop-filter: blur(12px); z-index: 200; transform: translateX(calc(-1 * var(--menu-width))); transition: transform 0.3s ease; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
         #menu.visible { transform: translateX(0); }
-        #menu-toggle { position: fixed; top: 15px; left: 15px; background: var(--primary); color: white; border: none; border-radius: 50%; width: 40px; height: 40px; font-size: 20px; cursor: pointer; z-index: 201; display: flex; justify-content: center; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.5); transition: transform 0.3s ease; }
+        #menu-toggle { position: fixed; top: 15px; left: 15px; background: var(--primary); color: white; border: none; border-radius: 50%; width: 40px; height: 40px; font-size: 20px; cursor: pointer; z-index: 201; display: flex; justify-content: center; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.5); transition: transform 0.3s ease, opacity 0.3s; }
         #menu.visible + #menu-toggle { transform: translateX(var(--menu-width)); }
         #menu-content { padding: 20px; overflow-y: auto; flex-grow: 1; }
         #menu-footer { padding: 15px 20px; border-top: 1px solid var(--border); }
-        h2,h3 { text-align: center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
-        h3 { cursor: pointer; user-select: none; } h3::after { content: ' ▼'; font-size: 0.8em; } h3.collapsed::after { content: ' ▶'; }
+        h2,h3,h4 { text-align: center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+        h3,h4 { cursor: pointer; user-select: none; } h3::after { content: ' ▼'; font-size: 0.8em; } h3.collapsed::after { content: ' ▶'; }
         .control-group { margin-bottom: 15px; }
-        .control-group label { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 14px; color: #bbb; }
+        .control-group > label { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 14px; color: #bbb; }
         button, select { width: 100%; padding: 10px; border: 1px solid #555; border-radius: 5px; background: #333; color: var(--text); cursor: pointer; font-size: 14px; }
         button:hover { background: #444; } button:disabled { background: #222; color: #777; cursor: not-allowed; }
         input[type="range"] { flex-grow: 1; padding: 0; accent-color: var(--primary); }
         
         /* Folder & Filter Styles */
-        #folder-list { max-height: 150px; overflow-y: auto; border: 1px solid #555; border-radius: 5px; padding: 10px; font-size: 13px; transition: max-height 0.3s, padding 0.3s, border 0.3s; }
+        .folder-header { display: flex; justify-content: space-between; align-items: center; }
+        .folder-options { font-size: 12px; color: #ccc; display:flex; gap: 5px; align-items: center; }
+        #invert-selection-btn { font-size: 11px; padding: 2px 6px; width: auto; background: #444; }
+        .folder-options label { cursor: pointer; user-select: none;}
+        #folder-list { max-height: 200px; overflow-y: auto; border: 1px solid #555; border-radius: 5px; padding: 10px; font-size: 13px; transition: all 0.3s; }
         #folder-list.collapsed { max-height: 0; padding: 0 10px; border-color: transparent; }
-        #folder-list label { margin-bottom: 5px; }
+        #folder-list label { display: block; margin-bottom: 5px; transition: background-color 0.2s; border-radius: 3px; padding: 2px 4px; }
+        #folder-list label.folder-highlight { background-color: var(--highlight-bg); }
+        #folder-list label.selected-folder { background-color: var(--selected-folder-highlight); }
+        #folder-list .unselected-divider { font-size: 11px; text-align: center; color: #888; margin: 10px 0; border-bottom: 1px dashed #555; line-height: 0.1em; }
+        #folder-list .unselected-divider span { background: var(--panel-bg); padding: 0 10px; }
         #color-filters { display: flex; flex-wrap: wrap; gap: 8px; }
-        .color-chip-wrapper { display: flex; align-items: center; gap: 5px; background: #2a2a2a; border-radius: 15px; padding: 2px 8px 2px 2px; cursor: pointer; border: 1px solid #444; }
-        .color-chip-wrapper.selected { border-color: var(--primary); }
+        .color-chip-wrapper { display: flex; align-items: center; gap: 5px; background: #2a2a2a; border-radius: 15px; padding: 5px 12px 5px 5px; cursor: pointer; border: 1px solid #444; }
+        .color-chip-wrapper.selected { border-color: var(--primary); background-color: var(--highlight-bg); }
         .color-chip { width: 20px; height: 20px; border-radius: 50%; font-size: 12px; display:flex; justify-content:center; align-items:center; }
         .color-count { font-size: 12px; color: #aaa; }
         #filter-controls { border: 1px solid var(--border); border-radius: 5px; padding: 10px; margin-top: 10px; }
@@ -45,19 +54,61 @@
         .reset-btn { background:none; border:none; color: #aaa; cursor:pointer; padding: 0 5px; font-size: 18px; }
         #skin-ratio-mode-toggle { font-size: 12px; padding: 2px 6px; width: auto; }
 
+        /* Color Match Mode & Help Tooltip */
+        #color-match-mode-controls { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; }
+        #color-match-mode-controls button { width: auto; padding: 4px 10px; font-size: 12px; background: #444; }
+        #color-match-mode-controls button.active { background: var(--primary); font-weight: bold; }
+        .help-tooltip { position: relative; display: inline-block; cursor: help; margin-left: 8px; color: #aaa; border: 1px solid #aaa; border-radius: 50%; width: 16px; height: 16px; font-size: 12px; text-align: center; line-height: 15px; }
+        .help-tooltip .tooltip-text { visibility: hidden; width: 250px; background-color: #222; color: #fff; text-align: left; border-radius: 6px; padding: 8px; position: absolute; z-index: 1; bottom: 125%; left: 50%; margin-left: -125px; opacity: 0; transition: opacity 0.3s; font-size: 12px; line-height: 1.5; border: 1px solid var(--border); }
+        .help-tooltip:hover .tooltip-text { visibility: visible; opacity: 1; }
+        .help-tooltip .tooltip-text strong { color: var(--primary); }
+
+        /* Smart Group Feature */
+        .smart-group-container { border: 1px solid var(--border); border-radius: 5px; margin-bottom: 10px; }
+        #smart-group-toggle { margin-bottom: 0; padding: 10px; border-bottom: none; font-size: 1em; }
+        #smart-group-toggle::after { content: ' ▼'; font-size: 0.8em; } #smart-group-toggle.collapsed::after { content: ' ▶'; }
+        #smart-group-panel { padding: 0 15px 15px 15px; border-top: 1px solid var(--border); overflow: hidden; max-height: 500px; transition: max-height 0.3s ease, padding 0.3s ease; }
+        #smart-group-panel.collapsed { max-height: 0; padding-top: 0; padding-bottom: 0; border-top: 1px solid transparent; }
+        #smart-group-panel .help-text-short { font-size: 12px; color: #999; text-align: center; margin-bottom: 10px; }
+        #group-candidates-list { margin-top: 10px; max-height: 180px; overflow-y: auto; font-size: 13px; }
+        .candidate-item { display: flex; align-items: center; padding: 6px; border-radius: 4px; transition: background-color 0.2s; }
+        .candidate-item:hover { background-color: rgba(255,255,255,0.05); }
+        .candidate-keyword { font-weight: bold; flex-grow: 1; display: flex; align-items: center; }
+        .candidate-count { font-size: 12px; color: #aaa; margin-left: 8px; }
+        .candidate-actions button { font-size: 10px; padding: 3px 6px; width: auto; margin-left: 5px; }
+        .feature-tag { font-size: 9px; font-weight: normal; background-color: #555; color: #ddd; padding: 1px 4px; border-radius: 8px; margin-left: 5px; }
+        .unique-separator { font-size: 11px; color: #888; text-align: center; margin: 10px 0 5px; border-bottom: 1px dashed #444; line-height: 0.1em; }
+        .unique-separator span { background: var(--panel-bg); padding: 0 10px; }
+        .panel-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+        .panel-footer button { width: auto; }
+        #smart-group-help-icon { font-size: 16px; font-weight: bold; color: #aaa; border: 1px solid #aaa; border-radius: 50%; width: 24px; height: 24px; display: flex; justify-content: center; align-items: center; cursor: pointer; }
+        /* Generic Modal Style */
+        .modal-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:1100; display:flex; justify-content:center; align-items:center; opacity:0; pointer-events:none; transition:opacity 0.3s; }
+        .modal-overlay.visible { opacity:1; pointer-events:all; }
+        .modal-content { background: #222; padding: 25px; border-radius: 8px; width: 90%; border: 1px solid var(--border); text-align: center; }
+        .modal-content h3, .modal-content h4 { text-align: left; } .modal-content p { font-size: 14px; line-height: 1.6; color: #ccc; margin-bottom: 10px; } .modal-content li { margin-left: 20px; }
+        #smart-group-help-modal .modal-content { max-width: 500px; }
+        #smart-group-focus-modal .modal-content { max-width: 400px; }
+        #smart-group-focus-list .group-item { padding: 8px 12px; margin: 5px 0; background-color: #333; border: 1px solid #555; border-radius: 5px; cursor: pointer; transition: background-color 0.2s; }
+        #smart-group-focus-list .group-item:hover { background-color: #444; }
+        .modal-close-btn { width:auto; padding: 8px 16px; margin-top: 20px; }
+
         /* --- Main Viewer --- */
         #viewer { flex-grow: 1; height: 100%; position: relative; overflow: hidden; }
         .view-container { width: 100%; height: 100%; display: none; }
         .view-container.active { display: flex; justify-content: center; align-items: center; }
         #single-view { position: relative; } #single-image { width: 100%; height: 100%; object-fit: contain; }
         .panel-view { gap: 10px; padding: 10px; }
-        .panel { width: 33.333%; height: 100%; } .panel img { width: 100%; height: 100%; object-fit: cover; background: #222; border-radius: 8px; }
+        .panel { width: 100%; height: 100%; } .panel img { width: 100%; height: 100%; object-fit: cover; background: #222; border-radius: 8px; }
         
-        /* Ambiance View */
         #ambiance-view { background: #000; }
         .ambiance-img { position: absolute; width: 100%; height: 100%; object-fit: contain; transition: opacity 2s ease-in-out; opacity: 0; }
         .ambiance-img.visible { opacity: 1; }
         
+        #cinema-four-view { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 8px; padding: 8px; }
+        #cinema-four-view .panel { background: #000; border-radius: 8px; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+        #cinema-four-view img { width: 100%; height: 100%; object-fit: contain; }
+
         /* Zoom Modal */
         #zoom-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
         #zoom-modal.visible { opacity: 1; pointer-events: all; }
@@ -71,10 +122,20 @@
         #gacha-result { text-align: center; } #gacha-image { max-width: 80vw; max-height: 80vh; border-radius: 10px; } #gacha-rarity { font-size: 4em; font-weight: bold; color: white; margin-top: 20px; text-shadow: 0 0 20px black; }
         .gacha-spin { animation: gachaSpin 1s ease-out; } .gacha-rare { animation: gachaRare 2s ease-in-out; box-shadow: 0 0 30px 10px gold; } .gacha-super-rare { animation: gachaSuperRare 2.5s ease-in-out; box-shadow: 0 0 40px 15px deeppink; }
         @keyframes gachaSpin { 0% { transform: rotate(0) scale(0); } 100% { transform: rotate(720deg) scale(1); } } @keyframes gachaRare { from { filter: brightness(5) saturate(5); } to { filter: brightness(1) saturate(1); } } @keyframes gachaSuperRare { from { filter: brightness(10) saturate(10) hue-rotate(360deg); } to { filter: brightness(1) saturate(1) hue-rotate(0deg); } }
-        #filename-display { display: flex; align-items: center; gap: 8px; position: fixed; bottom: 10px; right: 10px; background: var(--panel-bg); padding: 8px 15px; border-radius: 5px; font-size: 14px; z-index: 100; max-width: 50%; }
+        
+        #filename-display { display: flex; align-items: center; gap: 5px; position: fixed; bottom: 10px; right: 10px; background: rgba(20, 20, 20, 0.8); padding: 5px 10px; border-radius: 12px; font-size: 12px; z-index: 100; max-width: calc(100% - 40px); opacity: 0.8; transition: opacity 0.3s; }
+        #filename-display:hover { opacity: 1; }
         #filename-text { flex-grow: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        #exclude-folder-btn { background: #ff4444; border: none; border-radius: 3px; cursor: pointer; padding: 2px 5px; font-size: 10px; flex-shrink: 0; }
+        #exclude-folder-btn, #focus-folder-btn, #smart-group-focus-btn { background: none; border: none; color: #aaa; cursor: pointer; padding: 0 4px; font-size: 14px; line-height: 1; flex-shrink: 0; opacity: 0.7; }
+        #exclude-folder-btn:hover { color: #ff4444; opacity: 1; }
+        #focus-folder-btn:hover { color: #44aaff; opacity: 1; }
+        #smart-group-focus-btn:hover { color: #44ffa4; opacity: 1; }
         #progress-indicator { font-size: 12px; color: #aaa; text-align: center; height: 16px; }
+
+        /* Status Overlay */
+        #status-overlay { position: fixed; bottom: 10px; left: 10px; background: rgba(20, 20, 20, 0.8); padding: 8px 12px; border-radius: 8px; z-index: 100; font-size: 12px; color: #ccc; max-width: 300px; backdrop-filter: blur(5px); }
+        #status-overlay p { margin: 0; line-height: 1.5; }
+        #status-overlay span { font-weight: bold; color: white; }
     </style>
 </head>
 <body>
@@ -82,17 +143,68 @@
         <div id="menu-content">
             <h2>Viewer Ultimate</h2>
             <div class="control-group"><label>1. フォルダ選択</label><input type="file" id="folder-input" webkitdirectory directory></div>
-            <div class="control-group"><h3 id="folder-list-toggle">表示するフォルダ</h3><div id="folder-list">ここにフォルダが表示されます</div></div>
-            <div class="control-group"><label for="display-mode">表示モード</label><select id="display-mode"><option value="all">オール</option><option value="ambiance">アンビアンス</option><option value="folder-three">フォルダ3連</option><option value="random-three">ランダム3連</option><option value="horizontal">横長画像</option><option value="vertical">縦長画像</option></select></div>
+            
+            <div class="control-group">
+                <h3>インターフェース設定</h3>
+                <label><input type="checkbox" id="auto-hide-menu-check"> オートハイドメニュー</label>
+            </div>
+
+            <div class="control-group">
+                <div class="folder-header">
+                    <h3 id="folder-list-toggle">表示するフォルダ</h3>
+                    <div class="folder-options">
+                        <button id="invert-selection-btn" title="選択状態を反転します">選択を反転</button>
+                        <label title="選択中のフォルダをリストの上部にまとめます"><input type="checkbox" id="group-folders-toggle"> グループ化</label>
+                    </div>
+                </div>
+                
+                <div class="smart-group-container">
+                    <h4 id="smart-group-toggle" class="collapsed">スマートグループ</h4>
+                    <div id="smart-group-panel" class="collapsed">
+                        <p class="help-text-short">フォルダ名を分析し、共通キーワードでグループ操作します。</p>
+                        <button id="analyze-folders-btn">グループ候補を作成</button>
+                        <div id="group-candidates-list"></div>
+                        <div class="panel-footer">
+                            <button id="reset-selection-btn">選択をリセット</button>
+                            <span id="smart-group-help-icon">？</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="folder-list">ここにフォルダが表示されます</div>
+            </div>
+
+            <div class="control-group"><label for="display-mode">表示モード</label>
+                <select id="display-mode">
+                    <option value="all">オール</option>
+                    <option value="ambiance">アンビアンス</option>
+                    <option value="folder-three">フォルダ3連</option>
+                    <option value="random-three">ランダム3連</option>
+                    <option value="cinema-four">横長4連</option>
+                    <option value="horizontal">横長画像</option>
+                    <option value="vertical">縦長画像</option>
+                </select>
+            </div>
             <div id="slideshow-controls" class="control-group"><label>スライドショー</label><button id="play-pause-btn">再生</button><button id="shuffle-btn" style="margin-top:5px;">シャッフル OFF</button></div>
             <div class="control-group"><label for="interval-slider">再生間隔: <span id="interval-value">3</span>秒</label><input type="range" id="interval-slider" min="0.5" max="10" step="0.5" value="3"></div>
              <div class="control-group">
-                <h3>フィルター</h3><label><input type="checkbox" id="filename-visible-check"> ファイル名を表示</label>
+                <h3>フィルター</h3>
+                <label><input type="checkbox" id="filename-visible-check"> ファイル名を表示</label>
+                <label><input type="checkbox" id="show-status-check"> 画像ステータスを表示</label>
                 <label><input type="checkbox" id="filter-enable-check"> フィルターを有効にする</label>
                 <div id="filter-controls" class="disabled">
                     <label>└ (分析済みの画像に適用)</label>
                     <label for="skin-ratio-filter">肌の露出度 <button id="skin-ratio-mode-toggle">以上</button><span id="skin-ratio-value">0</span>%<button class="reset-btn" id="reset-skin-btn">⟳</button></label><input type="range" id="skin-ratio-filter" min="0" max="100" value="0">
-                    <label style="margin-top:10px;">アクセントカラー</label><div id="color-filters"></div>
+                    <label style="margin-top:10px;">
+                        アクセントカラー
+                        <span class="help-tooltip">？<span class="tooltip-text">クリックで複数色を選択できます。<br><strong>いずれか:</strong> 選択した色のどれかを含む画像を表示します。<br><strong>すべて:</strong> 選択した色を全て含む画像のみ表示します。</span></span>
+                    </label>
+                    <div id="color-match-mode-controls">
+                        <label>マッチ条件:</label>
+                        <button data-mode="OR" class="active">いずれか</button>
+                        <button data-mode="AND">すべて</button>
+                    </div>
+                    <div id="color-filters"></div>
                     <button id="apply-filters-btn" style="margin-top:10px;">フィルター適用</button>
                 </div>
             </div>
@@ -106,46 +218,95 @@
         <div id="ambiance-view" class="view-container"><img class="ambiance-img" data-index="0"><img class="ambiance-img" data-index="1"></div>
         <div id="folder-three-view" class="view-container panel-view"><div class="panel"><img data-index="0"></div><div class="panel"><img data-index="1"></div><div class="panel"><img data-index="2"></div></div>
         <div id="random-three-view" class="view-container panel-view"><div class="panel"><img data-index="0"></div><div class="panel"><img data-index="1"></div><div class="panel"><img data-index="2"></div></div>
+        <div id="cinema-four-view" class="view-container"><div class="panel"><img data-index="0"></div><div class="panel"><img data-index="1"></div><div class="panel"><img data-index="2"></div><div class="panel"><img data-index="3"></div></div>
+        <div id="status-overlay" style="display: none;"></div>
     </main>
     <div id="zoom-modal"><div id="zoom-controls"><button id="fullscreen-btn">全画面</button><button id="zoom-close-btn">閉じる</button></div><img id="zoom-image" src=""></div>
     <div id="gacha-overlay"><div id="gacha-result"><img id="gacha-image"><h1 id="gacha-rarity"></h1></div></div>
-    <div id="filename-display" style="display:none;"><span id="filename-text"></span><button id="exclude-folder-btn" title="このフォルダを除外">✖</button></div>
+    <div id="filename-display" style="display:none;"><span id="filename-text"></span><button id="smart-group-focus-btn" title="関連スマートグループを表示">⧉</button><button id="focus-folder-btn" title="このフォルダのみ表示">◉</button><button id="exclude-folder-btn" title="このフォルダを除外">✖</button></div>
+
+    <div id="smart-group-help-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>スマートグループ機能について</h3>
+            <p>この機能は、多数のサブフォルダを、名前に含まれる共通のキーワードで自動的にグループ化し、一括で表示/非表示を切り替えるためのものです。</p>
+            <ul><li><strong>グループ候補を作成:</strong><br>全てのフォルダ名を分析し、共通して含まれるキーワードを抽出します。</li><li><strong>キーワードの重要度評価:</strong><br>候補の横に表示されるタグは、そのキーワードがなぜ重要と判断されたかを示します。<br><span class="feature-tag">囲</span>:【】や「」で囲まれている<br><span class="feature-tag">長</span>: フォルダ名の中で一番長い単語<br><span class="feature-tag">先頭</span>: フォルダ名の先頭にある</li><li><strong>ユニークキーワード:</strong><br>グループ化されなかったものの、名前が特徴的なフォルダもリスト下部に表示されます。</li><li><strong>インタラクティブな確認:</strong><br>キーワードの行にマウスを乗せると、下のフォルダリストで対象フォルダがハイライトされます。</li></ul>
+             <button class="modal-close-btn">閉じる</button>
+        </div>
+    </div>
+    
+    <div id="smart-group-focus-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h4>関連スマートグループを選択</h4>
+            <div id="smart-group-focus-list"></div>
+            <button class="modal-close-btn">閉じる</button>
+        </div>
+    </div>
 
     <script>
     const workerCode = `function rgbToHsv(r,g,b){r/=255,g/=255,b/=255;const max=Math.max(r,g,b),min=Math.min(r,g,b);let h,s,v=max;const d=max-min;if(s=0===max?0:d/max,max===min)h=0;else{switch(max){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;case b:h=(r-g)/d+4}h/=6}return{h:360*h,s:s,v:v}}function getColorCategory(r,g,b){const{h:h,s:s,v:v}=rgbToHsv(r,g,b);return s<.1?"無彩色":v<.2?"黒系":s>.8&&v>.8?h<30||h>=330?"赤系":h<60?"黄系":h<150?"緑系":h<210?"シアン系":h<270?"青系":h<330?"マゼンタ系":"-":h<30||h>=330?"茶/赤系":h<60?"黄/肌色系":h<150?"緑系":h<210?"シアン系":h<270?"青系":h<330?"紫系":"-"}self.onmessage=async({data:{files:files}})=>{let e=0;const t=files.length;for(const s of files){try{const a=await createImageBitmap(s),n=function(e){const{width:t,height:s}=e,a=t/s,n=100,o=Math.round(s*n/t),r=new OffscreenCanvas(n,o),i=r.getContext("2d"),c=.1*t,l=.1*s,h=.8*t,d=.8*s;i.drawImage(e,c,l,h,d,0,0,n,o);const m=i.getImageData(0,0,n,o).data;let p=0;const g=new Set;for(let e=0;e<m.length;e+=4){const t=m[e],s=m[e+1],a=m[e+2];t>95&&s>40&&a>20&&t>s&&t>a&&Math.abs(t-s)>15&&Math.max(t,s,a)-Math.min(t,s,a)>15&&p++;const n=getColorCategory(t,s,a);"-"!==n&&"無彩色"!==n&&g.add(n)}return{skinRatio:p/n/o,aspectRatio:a,colorCategories:Array.from(g).slice(0,2)}}(a);a.close(),self.postMessage({type:"result",path:s.webkitRelativePath,features:n})}catch(e){}e++,self.postMessage({type:"progress",processed:e,total:t})}};`;
 
     (function() {
+        const NEAR_SQUARE_THRESHOLD = 0.1;
+
         const state = {
             allImages: [], filteredImages: [],
             allFolders: new Set(), selectedFolders: new Set(),
             analyzedCount: 0,
             currentIndex: 0, displayMode: 'all',
-            isSlideshow: false, slideshowInterval: null, slideshowSpeed: 3000, isShuffle: false,
+            isSlideshow: false, slideshowInterval: null, 
+            slideshowSpeed: 3000, isShuffle: false,
             isFilterEnabled: false, isFilenameVisible: false,
-            filters: { skinRatio: 0, skinRatioMode: 'more', colorCategory: null },
+            isGroupingFolders: false, isShowStatus: false,
+            isAutoHideMenu: false,
+            filters: { 
+                skinRatio: 0, 
+                skinRatioMode: 'more', 
+                colorCategories: new Set(),
+                colorMatchMode: 'OR'
+            },
             urlCache: new Map(), worker: null,
-            ambiance: { currentImageIndex: 0 }
+            ambiance: { currentImageIndex: 0 },
+            folderKeywordMap: new Map(),
         };
 
         const dom = {
             menu: document.getElementById('menu'), menuToggle: document.getElementById('menu-toggle'),
             folderInput: document.getElementById('folder-input'), folderList: document.getElementById('folder-list'), folderListToggle: document.getElementById('folder-list-toggle'),
+            groupFoldersToggle: document.getElementById('group-folders-toggle'),
+            invertSelectionBtn: document.getElementById('invert-selection-btn'),
+            autoHideMenuCheck: document.getElementById('auto-hide-menu-check'),
             displayModeSelect: document.getElementById('display-mode'),
             slideshowControls: document.getElementById('slideshow-controls'), playPauseBtn: document.getElementById('play-pause-btn'), shuffleBtn: document.getElementById('shuffle-btn'),
             intervalSlider: document.getElementById('interval-slider'), intervalValue: document.getElementById('interval-value'),
             filterEnableCheck: document.getElementById('filter-enable-check'), filterControls: document.getElementById('filter-controls'),
             skinRatioFilter: document.getElementById('skin-ratio-filter'), skinRatioValue: document.getElementById('skin-ratio-value'), skinRatioModeToggle: document.getElementById('skin-ratio-mode-toggle'), resetSkinBtn: document.getElementById('reset-skin-btn'),
-            colorFilters: document.getElementById('color-filters'), applyFiltersBtn: document.getElementById('apply-filters-btn'), filenameVisibleCheck: document.getElementById('filename-visible-check'),
+            colorFilters: document.getElementById('color-filters'),
+            colorMatchModeControls: document.getElementById('color-match-mode-controls'),
+            applyFiltersBtn: document.getElementById('apply-filters-btn'), filenameVisibleCheck: document.getElementById('filename-visible-check'),
+            showStatusCheck: document.getElementById('show-status-check'),
             gachaBtn: document.getElementById('gacha-btn'),
             viewContainers: document.querySelectorAll('.view-container'),
             single: { view: document.getElementById('single-view'), img: document.getElementById('single-image') },
             ambiance: { view: document.getElementById('ambiance-view'), imgs: document.querySelectorAll('.ambiance-img') },
             folderThree: { view: document.getElementById('folder-three-view'), imgs: document.querySelectorAll('#folder-three-view img')},
             randomThree: { view: document.getElementById('random-three-view'), imgs: document.querySelectorAll('#random-three-view img')},
+            cinemaFour: { view: document.getElementById('cinema-four-view'), imgs: document.querySelectorAll('#cinema-four-view img') },
             zoom: { modal: document.getElementById('zoom-modal'), img: document.getElementById('zoom-image'), closeBtn: document.getElementById('zoom-close-btn'), fullscreenBtn: document.getElementById('fullscreen-btn') },
             gacha: { overlay: document.getElementById('gacha-overlay'), result: document.getElementById('gacha-result'), img: document.getElementById('gacha-image'), rarity: document.getElementById('gacha-rarity') },
             progressIndicator: document.getElementById('progress-indicator'),
-            filenameDisplay: document.getElementById('filename-display'), filenameText: document.getElementById('filename-text'), excludeFolderBtn: document.getElementById('exclude-folder-btn'),
+            filenameDisplay: document.getElementById('filename-display'), filenameText: document.getElementById('filename-text'),
+            smartGroupFocusBtn: document.getElementById('smart-group-focus-btn'),
+            focusFolderBtn: document.getElementById('focus-folder-btn'),
+            excludeFolderBtn: document.getElementById('exclude-folder-btn'),
+            statusOverlay: document.getElementById('status-overlay'),
+            smartGroup: {
+                toggle: document.getElementById('smart-group-toggle'), panel: document.getElementById('smart-group-panel'),
+                analyzeBtn: document.getElementById('analyze-folders-btn'), candidatesList: document.getElementById('group-candidates-list'),
+                resetBtn: document.getElementById('reset-selection-btn'), helpIcon: document.getElementById('smart-group-help-icon'),
+                helpModal: document.getElementById('smart-group-help-modal'),
+                focusModal: document.getElementById('smart-group-focus-modal'),
+                focusList: document.getElementById('smart-group-focus-list'),
+            },
         };
 
         function init() {
@@ -159,219 +320,289 @@
             dom.menuToggle.addEventListener('click', () => dom.menu.classList.toggle('visible'));
             dom.folderInput.addEventListener('change', handleFolderSelection);
             dom.folderListToggle.addEventListener('click', (e) => { e.target.classList.toggle('collapsed'); dom.folderList.classList.toggle('collapsed'); });
+            dom.groupFoldersToggle.addEventListener('change', (e) => { state.isGroupingFolders = e.target.checked; updateFolderListUI(); });
+            dom.invertSelectionBtn.addEventListener('click', handleInvertSelection);
+            dom.autoHideMenuCheck.addEventListener('change', toggleAutoHideMenu);
             dom.displayModeSelect.addEventListener('change', handleDisplayModeChange);
             dom.playPauseBtn.addEventListener('click', toggleSlideshow);
             dom.shuffleBtn.addEventListener('click', toggleShuffle);
             dom.intervalSlider.addEventListener('input', handleIntervalChange);
             dom.filenameVisibleCheck.addEventListener('change', (e) => { state.isFilenameVisible = e.target.checked; dom.filenameDisplay.style.display = state.isFilenameVisible ? 'flex' : 'none'; });
+            dom.showStatusCheck.addEventListener('change', (e) => { state.isShowStatus = e.target.checked; updateStatusOverlay(); });
             dom.filterEnableCheck.addEventListener('change', (e) => { state.isFilterEnabled = e.target.checked; dom.filterControls.classList.toggle('disabled', !state.isFilterEnabled); if (!state.isFilterEnabled) applyFiltersAndRender(); });
             dom.applyFiltersBtn.addEventListener('click', () => applyFiltersAndRender());
             dom.skinRatioFilter.addEventListener('input', () => { state.filters.skinRatio = dom.skinRatioFilter.value / 100; dom.skinRatioValue.textContent = `${dom.skinRatioFilter.value}`; });
             dom.skinRatioModeToggle.addEventListener('click', () => { state.filters.skinRatioMode = state.filters.skinRatioMode === 'more' ? 'less' : 'more'; dom.skinRatioModeToggle.textContent = state.filters.skinRatioMode === 'more' ? '以上' : '以下'; });
             dom.resetSkinBtn.addEventListener('click', () => { dom.skinRatioFilter.value = 0; dom.skinRatioFilter.dispatchEvent(new Event('input')); });
+            dom.colorMatchModeControls.addEventListener('click', handleColorMatchModeChange);
             dom.gachaBtn.addEventListener('click', startGacha);
             dom.gacha.overlay.addEventListener('click', () => dom.gacha.overlay.classList.remove('visible'));
+            dom.smartGroupFocusBtn.addEventListener('click', handleFocusSmartGroup);
+            dom.focusFolderBtn.addEventListener('click', handleFocusFolder);
             dom.excludeFolderBtn.addEventListener('click', handleExcludeFolder);
-            document.addEventListener('keydown', (e) => { if (e.target.tagName !== 'INPUT' && !dom.zoom.modal.classList.contains('visible')) { if(e.key === 'ArrowRight') moveNext(1); if(e.key === 'ArrowLeft') moveNext(-1); if(e.key === ' ' && state.displayMode !== 'flow-view') {e.preventDefault(); toggleSlideshow();} } });
+            document.addEventListener('keydown', (e) => { if (e.target.tagName !== 'INPUT' && !dom.zoom.modal.classList.contains('visible')) { if(e.key === 'ArrowRight') moveNext(1); if(e.key === 'ArrowLeft') moveNext(-1); if(e.key === ' ') {e.preventDefault(); toggleSlideshow();} } });
             document.getElementById('viewer').addEventListener('dblclick', (e) => { if(e.target.tagName === 'IMG' && e.target.src) openZoomModal(e.target.src); });
             dom.zoom.closeBtn.addEventListener('click', closeZoomModal);
             dom.zoom.fullscreenBtn.addEventListener('click', () => dom.zoom.modal.requestFullscreen());
             setupZoomPan(dom.zoom.img);
-        }
 
-        async function handleFolderSelection(e) {
-            const files = Array.from(e.target.files).filter(f => f.size > 0 && /\.(jpg|jpeg|png|gif|webp)$/i.test(f.name));
-            if (!files.length) return; resetState();
-            state.allImages = files.map(file => {
-                const path = file.webkitRelativePath; const folderPath = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : '(ルート)';
-                state.allFolders.add(folderPath); return { path, file, features: null, folderPath };
+            dom.smartGroup.toggle.addEventListener('click', toggleSmartGroupPanel);
+            dom.smartGroup.analyzeBtn.addEventListener('click', analyzeAndRenderGroups);
+            dom.smartGroup.candidatesList.addEventListener('click', handleCandidateActions);
+            dom.smartGroup.candidatesList.addEventListener('mouseover', handleCandidateHover);
+            dom.smartGroup.candidatesList.addEventListener('mouseout', handleCandidateHover);
+            dom.smartGroup.resetBtn.addEventListener('click', resetFolderSelection);
+            
+            // Generic modal close logic
+            document.querySelectorAll('.modal-overlay').forEach(modal => {
+                modal.addEventListener('click', (e) => { if (e.target === modal || e.target.classList.contains('modal-close-btn')) modal.classList.remove('visible'); });
             });
-            state.selectedFolders = new Set(state.allFolders);
-            updateFolderListUI(); state.worker.postMessage({ files }); applyFiltersAndRender();
+            dom.smartGroup.helpIcon.addEventListener('click', () => dom.smartGroup.helpModal.classList.add('visible'));
+            dom.smartGroup.focusList.addEventListener('click', handleSmartGroupFocusSelection);
         }
-        
-        function handleWorkerMessage({ data }) {
-            switch(data.type) {
-                case 'progress': dom.progressIndicator.textContent = `分析中: ${data.processed} / ${data.total}`; break;
-                case 'result':
-                    state.analyzedCount++; const image = state.allImages.find(img => img.path === data.path);
-                    if (image) image.features = data.features;
-                    if (state.analyzedCount > 0) dom.gachaBtn.disabled = false;
-                    updateColorFilterUI();
-                    break;
-            }
-        }
-        
-        function handleDisplayModeChange() { state.displayMode = dom.displayModeSelect.value; applyFiltersAndRender(); }
-        function handleIntervalChange() { state.slideshowSpeed = dom.intervalSlider.value * 1000; updateUIVisibility(); if (state.isSlideshow) { stopSlideshow(); startSlideshow(); } }
-        function handleExcludeFolder() { const currentImage = state.filteredImages[state.currentIndex]; if (!currentImage) return; state.selectedFolders.delete(currentImage.folderPath); updateFolderListUI(); applyFiltersAndRender(); }
 
+        // --- Core Logic ---
         function applyFiltersAndRender() {
             const wasSlideshowPlaying = state.isSlideshow;
             stopSlideshow();
-
             let images = state.allImages.filter(img => state.selectedFolders.has(img.folderPath));
             if (state.isFilterEnabled) {
-                const { skinRatio, skinRatioMode, colorCategory } = state.filters;
+                const { skinRatio, skinRatioMode, colorCategories, colorMatchMode } = state.filters;
                 images = images.filter(img => {
                     if (!img.features) return false;
                     if (skinRatioMode === 'more' ? img.features.skinRatio < skinRatio : img.features.skinRatio > skinRatio) return false;
-                    if (colorCategory && !img.features.colorCategories.includes(colorCategory)) return false;
+                    
+                    if (colorCategories.size > 0) {
+                        const imageColors = new Set(img.features.colorCategories);
+                        if (colorMatchMode === 'OR') {
+                            let match = false;
+                            for (const color of colorCategories) { if (imageColors.has(color)) { match = true; break; } }
+                            if (!match) return false;
+                        } else {
+                            for (const color of colorCategories) { if (!imageColors.has(color)) return false; }
+                        }
+                    }
                     return true;
                 });
             }
-            if (state.displayMode === 'horizontal') images = images.filter(img => img.features && img.features.aspectRatio >= 1);
-            if (state.displayMode === 'vertical') images = images.filter(img => img.features && img.features.aspectRatio < 1);
             
             if (state.isShuffle) shuffleArray(images);
             else images.sort((a,b) => a.path.localeCompare(b.path));
-            
             state.filteredImages = images;
             state.currentIndex = 0;
-            render();
+            moveNext(0);
             if (wasSlideshowPlaying) startSlideshow();
         }
 
-        function resetState() {
-            stopSlideshow(); state.allImages = []; state.allFolders.clear(); state.selectedFolders.clear(); state.analyzedCount = 0;
-            state.urlCache.forEach(URL.revokeObjectURL); state.urlCache.clear();
-            dom.gachaBtn.disabled = true; dom.filterEnableCheck.checked = false; state.isFilterEnabled = false;
-            dom.filterControls.classList.add('disabled'); dom.colorFilters.innerHTML = ''; dom.folderList.innerHTML = 'ここにフォルダが表示されます';
-            dom.progressIndicator.textContent = '';
+       async function moveNext(direction) {
+            if (state.filteredImages.length === 0) return;
+
+            let nextIndex = state.currentIndex;
+            const total = state.filteredImages.length;
+            let attempts = 0;
+
+            if (direction !== 0) {
+                 nextIndex = (state.currentIndex + direction + total) % total;
+            }
+
+            while (attempts < total) {
+                const image = state.filteredImages[nextIndex];
+                const mode = state.displayMode;
+
+                if (mode !== 'horizontal' && mode !== 'vertical' && mode !== 'cinema-four') {
+                    state.currentIndex = nextIndex;
+                    updateDisplay();
+                    return;
+                }
+
+                if (!image.features || image.features.aspectRatio === undefined) {
+                    try {
+                        const bmp = await createImageBitmap(image.file);
+                        const aspectRatio = bmp.width / bmp.height;
+                        if (!image.features) image.features = {};
+                        if (!image.features.hasOwnProperty('skinRatio')) {
+                           image.features.isPartial = true; 
+                        }
+                        image.features.aspectRatio = aspectRatio;
+                        bmp.close();
+                    } catch (e) {
+                        console.error("On-demand analysis failed:", image.path, e);
+                        nextIndex = (nextIndex + (direction || 1) + total) % total;
+                        attempts++;
+                        continue;
+                    }
+                }
+
+                const { aspectRatio } = image.features;
+                const isLandscape = aspectRatio >= (1 + NEAR_SQUARE_THRESHOLD);
+                const isPortrait = aspectRatio <= (1 - NEAR_SQUARE_THRESHOLD);
+
+                let isValid = false;
+                if ((mode === 'horizontal' || mode === 'cinema-four') && isLandscape) isValid = true;
+                if (mode === 'vertical' && isPortrait) isValid = true;
+                
+                if (isValid) {
+                    state.currentIndex = nextIndex;
+                    updateDisplay();
+                    return;
+                }
+
+                nextIndex = (nextIndex + (direction === 0 ? 1 : direction) + total) % total;
+                attempts++;
+            }
+            console.warn(`No suitable image found for mode: ${state.displayMode}`);
         }
 
-        function toggleSlideshow() { if (state.isSlideshow) stopSlideshow(); else startSlideshow(); }
-        function startSlideshow() {
-            state.isSlideshow = true; dom.playPauseBtn.textContent = '停止';
-            moveNext(0);
-            state.slideshowInterval = setInterval(() => moveNext(1), state.slideshowSpeed);
-        }
-        function stopSlideshow() {
-            clearInterval(state.slideshowInterval); state.slideshowInterval = null;
-            state.isSlideshow = false; dom.playPauseBtn.textContent = '再生';
-        }
-        function toggleShuffle() { state.isShuffle = !state.isShuffle; dom.shuffleBtn.textContent = `シャッフル ${state.isShuffle ? 'ON' : 'OFF'}`; applyFiltersAndRender(); }
-        function moveNext(direction) { if (state.filteredImages.length === 0) return; state.currentIndex = (state.currentIndex + direction + state.filteredImages.length) % state.filteredImages.length; render(true); }
-
-        function startGacha() {
-            const analyizedImages = state.allImages.filter(img => img.features); if (!analyizedImages.length) return;
-            const targetImage = analyizedImages[Math.floor(Math.random() * analyizedImages.length)]; const { skinRatio } = targetImage.features;
-            let rarity = 'NORMAL'; let rarityClass = 'gacha-spin';
-            if (skinRatio > 0.3) { rarity = 'SUPER RARE!!'; rarityClass += ' gacha-super-rare'; }
-            else if (skinRatio > 0.15) { rarity = 'RARE!'; rarityClass += ' gacha-rare'; }
-            dom.gacha.img.src = getImageUrl(targetImage); dom.gacha.rarity.textContent = rarity; dom.gacha.result.className = rarityClass; dom.gacha.overlay.classList.add('visible');
-        }
-
-        function render(isNavigating = false) {
-            dom.viewContainers.forEach(c => c.classList.remove('active')); updateUIVisibility();
-
+        function updateDisplay() {
+            dom.viewContainers.forEach(c => c.classList.remove('active'));
             const { filteredImages, displayMode } = state;
             
             const renderActions = {
-                'all': renderSingleView,
-                'horizontal': renderSingleView,
-                'vertical': renderSingleView,
+                'all': renderSingleView, 'horizontal': renderSingleView, 'vertical': renderSingleView,
                 'ambiance': renderAmbianceView,
                 'folder-three': renderFolderThreeView,
-                'random-three': renderRandomThreeView
+                'random-three': renderRandomThreeView,
+                'cinema-four': renderCinemaFourView,
             };
-            
             const action = renderActions[displayMode];
             if (action) {
-                if (isNavigating || !state.isSlideshow || ['folder-three', 'random-three'].includes(displayMode)) {
-                    action(filteredImages);
-                }
+                action(filteredImages);
             }
+            
             updateFilenameDisplay();
+            updateStatusOverlay();
         }
         
         function renderSingleView(images) { dom.single.view.classList.add('active'); const image = images[state.currentIndex]; dom.single.img.src = image ? getImageUrl(image) : ''; }
-        function renderAmbianceView(images) {
-            dom.ambiance.view.classList.add('active');
-            if(images.length === 0) return;
-            const currentImgEl = dom.ambiance.imgs[state.ambiance.currentImageIndex];
-            const nextImgEl = dom.ambiance.imgs[(state.ambiance.currentImageIndex + 1) % 2];
-            const nextImage = images[state.currentIndex];
-            if(!nextImage) return;
-            nextImgEl.src = getImageUrl(nextImage);
-            currentImgEl.classList.remove('visible');
-            nextImgEl.classList.add('visible');
-            state.ambiance.currentImageIndex = (state.ambiance.currentImageIndex + 1) % 2;
-        }
-        function renderFolderThreeView(images) {
-            dom.folderThree.view.classList.add('active');
-            const currentImage = images[state.currentIndex];
-            if(!currentImage) { dom.folderThree.imgs.forEach(img => { img.src = ''; img.dataset.path = ''; }); return; }
-            const sameFolderImages = state.allImages.filter(img => img.folderPath === currentImage.folderPath && img.path !== currentImage.path);
-            shuffleArray(sameFolderImages);
-            const displayImages = [currentImage, ...sameFolderImages.slice(0, 2)];
-            dom.folderThree.imgs.forEach((img, i) => { const image = displayImages[i]; img.src = image ? getImageUrl(image) : ''; img.dataset.path = image ? image.path : ''; });
-        }
-        function renderRandomThreeView(images) {
-            dom.randomThree.view.classList.add('active');
-            dom.randomThree.imgs.forEach((img) => {
-                const randomImage = images.length > 0 ? images[Math.floor(Math.random() * images.length)] : null;
-                img.src = randomImage ? getImageUrl(randomImage) : ''; img.dataset.path = randomImage ? randomImage.path : '';
-            });
-        }
+        function renderAmbianceView(images) { dom.ambiance.view.classList.add('active'); if(images.length === 0) return; const currentImgEl = dom.ambiance.imgs[state.ambiance.currentImageIndex]; const nextImgEl = dom.ambiance.imgs[(state.ambiance.currentImageIndex + 1) % 2]; const nextImage = images[state.currentIndex]; if(!nextImage) return; nextImgEl.src = getImageUrl(nextImage); currentImgEl.classList.remove('visible'); nextImgEl.classList.add('visible'); state.ambiance.currentImageIndex = (state.ambiance.currentImageIndex + 1) % 2; }
+        function renderFolderThreeView(images) { dom.folderThree.view.classList.add('active'); const currentImage = images[state.currentIndex]; if(!currentImage) { dom.folderThree.imgs.forEach(img => { img.src = ''; img.dataset.path = ''; }); return; } const sameFolderImages = state.allImages.filter(img => img.folderPath === currentImage.folderPath && img.path !== currentImage.path); shuffleArray(sameFolderImages); const displayImages = [currentImage, ...sameFolderImages.slice(0, 2)]; dom.folderThree.imgs.forEach((img, i) => { const image = displayImages[i]; img.src = image ? getImageUrl(image) : ''; img.dataset.path = image ? image.path : ''; }); }
+        function renderRandomThreeView(images) { dom.randomThree.view.classList.add('active'); dom.randomThree.imgs.forEach((img) => { const randomImage = images.length > 0 ? images[Math.floor(Math.random() * images.length)] : null; img.src = randomImage ? getImageUrl(randomImage) : ''; img.dataset.path = randomImage ? randomImage.path : ''; }); }
+        function renderCinemaFourView(images) { dom.cinemaFour.view.classList.add('active'); const displayImages = [...images]; shuffleArray(displayImages); dom.cinemaFour.imgs.forEach((img, i) => { const image = displayImages[i]; img.src = image ? getImageUrl(image) : ''; img.dataset.path = image ? image.path : ''; }); }
         
-        function updateUIVisibility() {
-            dom.slideshowControls.style.display = 'block';
-            dom.intervalSlider.previousElementSibling.textContent = `再生間隔: ${dom.intervalSlider.value}秒`;
+        function handleColorMatchModeChange(e) {
+            const button = e.target.closest('button');
+            if (!button) return;
+            state.filters.colorMatchMode = button.dataset.mode;
+            dom.colorMatchModeControls.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
+            button.classList.add('active');
         }
-        function updateFolderListUI() {
-            dom.folderList.innerHTML = ''; [...state.allFolders].sort().forEach(folderPath => {
-                const id = `folder-${folderPath.replace(/[^a-zA-Z0-9]/g, '')}`; const label = document.createElement('label'); label.htmlFor = id;
-                const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.id = id; checkbox.checked = state.selectedFolders.has(folderPath);
-                checkbox.onchange = () => { if (checkbox.checked) state.selectedFolders.add(folderPath); else state.selectedFolders.delete(folderPath); applyFiltersAndRender(); };
-                label.appendChild(checkbox); label.append(folderPath); dom.folderList.appendChild(label);
-            });
-        }
+
         function updateColorFilterUI() {
             const images = state.allImages.filter(img => state.selectedFolders.has(img.folderPath));
-            const colorCounts = {}; images.filter(img => img.features).forEach(img => img.features.colorCategories.forEach(cat => colorCounts[cat] = (colorCounts[cat] || 0) + 1));
+            const colorCounts = {}; images.filter(img => img.features && img.features.colorCategories).forEach(img => img.features.colorCategories.forEach(cat => colorCounts[cat] = (colorCounts[cat] || 0) + 1));
             dom.colorFilters.innerHTML = '';
             Object.entries(colorCounts).sort((a,b)=>b[1]-a[1]).forEach(([category, count]) => {
-                const wrapper = document.createElement('div'); wrapper.className = 'color-chip-wrapper'; if (category === state.filters.colorCategory) wrapper.classList.add('selected');
-                wrapper.onclick = () => { if (wrapper.classList.contains('selected')) { state.filters.colorCategory = null; } else { state.filters.colorCategory = category; } updateColorFilterUI(); };
+                const wrapper = document.createElement('div'); wrapper.className = 'color-chip-wrapper'; 
+                if (state.filters.colorCategories.has(category)) wrapper.classList.add('selected');
+                
+                wrapper.onclick = () => { 
+                    if (state.filters.colorCategories.has(category)) {
+                        state.filters.colorCategories.delete(category);
+                    } else {
+                        state.filters.colorCategories.add(category);
+                    }
+                    wrapper.classList.toggle('selected');
+                };
+                
                 const chip = document.createElement('div'); chip.className = 'color-chip'; chip.textContent = category[0]; chip.style.background = `hsl(${Math.random()*360}, 50%, 30%)`;
                 const countSpan = document.createElement('span'); countSpan.className = 'color-count'; countSpan.textContent = `(${count})`;
                 wrapper.appendChild(chip); wrapper.append(category); wrapper.appendChild(countSpan); dom.colorFilters.appendChild(wrapper);
             });
         }
-        function updateFilenameDisplay() {
-            let textContent = '画像なし', titleContent = '画像なし';
-            if (['folder-three', 'random-three'].includes(state.displayMode)) {
-                const imgs = state.displayMode === 'folder-three' ? dom.folderThree.imgs : dom.randomThree.imgs;
-                const paths = [...imgs].map(img => img.dataset.path?.split('/').pop()).filter(Boolean);
-                if (paths.length > 0) { textContent = paths.join(', '); titleContent = paths.join('\n'); }
-            } else {
-                const currentImage = state.filteredImages[state.currentIndex];
-                if (currentImage) { const name = currentImage.path.split('/').pop(); textContent = name; titleContent = name; }
-            }
-            dom.filenameText.textContent = textContent; dom.filenameDisplay.title = titleContent;
-            dom.excludeFolderBtn.style.display = state.filteredImages[state.currentIndex] ? 'block' : 'none';
-        }
-        function openZoomModal(src) { dom.zoom.img.src = src; dom.zoom.modal.classList.add('visible'); dom.zoom.img.style.transform = 'scale(1) translate(0, 0)'; }
-        function closeZoomModal() { dom.zoom.modal.classList.remove('visible'); }
-        function setupZoomPan(el) {
-            let scale = 1, panning = false, pointX = 0, pointY = 0, start = { x: 0, y: 0 };
-            const setTransform = () => el.style.transform = `scale(${scale}) translate(${pointX}px, ${pointY}px)`;
-            el.onmousedown = (e) => { e.preventDefault(); start = { x: e.clientX - pointX, y: e.clientY - pointY }; panning = true; el.style.cursor = 'grabbing'; };
-            el.onmouseup = () => { panning = false; el.style.cursor = 'grab'; };
-            el.onmousemove = (e) => { if (panning) { pointX = e.clientX - start.x; pointY = e.clientY - start.y; setTransform(); } };
-            el.onwheel = (e) => { e.preventDefault(); const delta = e.deltaY > 0 ? -0.2 : 0.2; scale = Math.max(1, scale + delta); setTransform(); };
-        }
-        function getImageUrl(image) {
-            if (!image) return ''; if (state.urlCache.has(image.path)) return state.urlCache.get(image.path);
-            const url = URL.createObjectURL(image.file); state.urlCache.set(image.path, url);
-            if (state.urlCache.size > 300) { const oldest = state.urlCache.keys().next().value; URL.revokeObjectURL(state.urlCache.get(oldest)); state.urlCache.delete(oldest); } return url;
-        }
-        function shuffleArray(array) { for (let i = array.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [array[i], array[j]] = [array[j], array[i]]; } }
         
+        function updateStatusOverlay() { if (!state.isShowStatus) { dom.statusOverlay.style.display = 'none'; return; } const currentImage = state.filteredImages[state.currentIndex]; if (currentImage && currentImage.features) { const { skinRatio, colorCategories, aspectRatio } = currentImage.features; let html = ``; if(skinRatio !== undefined) html += `<p>肌比率: <span>${(skinRatio * 100).toFixed(1)}%</span></p>`; if(colorCategories) html += `<p>カラー: <span>${colorCategories.join(', ') || 'N/A'}</span></p>`; if(aspectRatio !== undefined) { let orientation = ''; if (aspectRatio >= (1 + NEAR_SQUARE_THRESHOLD)) orientation = '(横長)'; else if (aspectRatio <= (1 - NEAR_SQUARE_THRESHOLD)) orientation = '(縦長)'; else orientation = '(正方形に近い)'; html += `<p>比率: <span>${aspectRatio.toFixed(2)} ${orientation}</span></p>`; } if (html === '') { dom.statusOverlay.innerHTML = '<p>分析データなし</p>'; } else { dom.statusOverlay.innerHTML = html; } dom.statusOverlay.style.display = 'block'; } else { dom.statusOverlay.innerHTML = '<p>分析データなし</p>'; dom.statusOverlay.style.display = 'block'; } }
+        
+        function toggleAutoHideMenu(e) { state.isAutoHideMenu = e.target.checked; if (state.isAutoHideMenu) { dom.menuToggle.style.opacity = '0'; dom.menuToggle.style.pointerEvents = 'none'; document.addEventListener('mousemove', handleMouseMoveForMenu); dom.menu.addEventListener('mouseleave', handleMouseLeaveFromMenu); } else { dom.menuToggle.style.opacity = '1'; dom.menuToggle.style.pointerEvents = 'auto'; dom.menu.classList.remove('visible'); document.removeEventListener('mousemove', handleMouseMoveForMenu); dom.menu.removeEventListener('mouseleave', handleMouseLeaveFromMenu); } }
+        function handleMouseMoveForMenu(e) { if (!state.isAutoHideMenu) return; if (e.clientX < 20 && !dom.menu.classList.contains('visible')) { dom.menu.classList.add('visible'); } }
+        function handleMouseLeaveFromMenu() { if (state.isAutoHideMenu && dom.menu.classList.contains('visible')) { dom.menu.classList.remove('visible'); } }
+
+        async function handleFolderSelection(e) { const files = Array.from(e.target.files).filter(f => f.size > 0 && /\.(jpg|jpeg|png|gif|webp)$/i.test(f.name)); if (!files.length) return; resetState(); state.allImages = files.map(file => { const path = file.webkitRelativePath; const folderPath = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : '(ルート)'; state.allFolders.add(folderPath); return { path, file, features: null, folderPath }; }); state.selectedFolders = new Set(state.allFolders); updateFolderListUI(); state.worker.postMessage({ files }); applyFiltersAndRender(); };
+        function handleWorkerMessage({ data }) { switch(data.type) { case 'progress': dom.progressIndicator.textContent = `分析中: ${data.processed} / ${data.total}`; break; case 'result': state.analyzedCount++; const image = state.allImages.find(img => img.path === data.path); if (image) { image.features = data.features; delete image.features.isPartial; } if (state.analyzedCount > 0) dom.gachaBtn.disabled = false; updateColorFilterUI(); break; } };
+        function handleDisplayModeChange() { state.displayMode = dom.displayModeSelect.value; applyFiltersAndRender(); };
+        function handleIntervalChange() { state.slideshowSpeed = dom.intervalSlider.value * 1000; dom.intervalValue.textContent = dom.intervalSlider.value; if (state.isSlideshow) { stopSlideshow(); startSlideshow(); } };
+        
+        function handleInvertSelection() {
+            const newSelectedFolders = new Set();
+            for (const folder of state.allFolders) {
+                if (!state.selectedFolders.has(folder)) {
+                    newSelectedFolders.add(folder);
+                }
+            }
+            state.selectedFolders = newSelectedFolders;
+            updateFolderListUI();
+            applyFiltersAndRender();
+        }
+        
+        function handleFocusFolder() {
+            const currentImage = state.filteredImages[state.currentIndex];
+            if (!currentImage) return;
+            state.selectedFolders = new Set([currentImage.folderPath]);
+            updateFolderListUI();
+            applyFiltersAndRender();
+        }
+
+        function handleExcludeFolder() { const currentImage = state.filteredImages[state.currentIndex]; if (!currentImage) return; state.selectedFolders.delete(currentImage.folderPath); updateFolderListUI(); applyFiltersAndRender(); };
+        function resetState() { stopSlideshow(); state.allImages = []; state.allFolders.clear(); state.selectedFolders.clear(); state.analyzedCount = 0; state.urlCache.forEach(URL.revokeObjectURL); state.urlCache.clear(); dom.gachaBtn.disabled = true; dom.filterEnableCheck.checked = false; state.isFilterEnabled = false; dom.groupFoldersToggle.checked = false; state.isGroupingFolders = false; dom.showStatusCheck.checked = false; state.isShowStatus = false; dom.autoHideMenuCheck.checked = false; if(state.isAutoHideMenu) toggleAutoHideMenu({target:{checked:false}}); state.isAutoHideMenu = false; state.filters.colorCategories.clear(); state.filters.colorMatchMode = 'OR'; dom.filterControls.classList.add('disabled'); dom.colorFilters.innerHTML = ''; dom.smartGroup.candidatesList.innerHTML = ''; state.folderKeywordMap.clear(); dom.progressIndicator.textContent = ''; };
+        function toggleSlideshow() { if (state.isSlideshow) stopSlideshow(); else startSlideshow(); };
+        function startSlideshow() { if (state.filteredImages.length < 1) return; state.isSlideshow = true; dom.playPauseBtn.textContent = '停止'; moveNext(1); state.slideshowInterval = setInterval(() => moveNext(1), state.slideshowSpeed); };
+        function stopSlideshow() { clearInterval(state.slideshowInterval); state.slideshowInterval = null; state.isSlideshow = false; dom.playPauseBtn.textContent = '再生'; };
+        function toggleShuffle() { state.isShuffle = !state.isShuffle; dom.shuffleBtn.textContent = `シャッフル ${state.isShuffle ? 'ON' : 'OFF'}`; applyFiltersAndRender(); };
+        function startGacha() { const analyizedImages = state.allImages.filter(img => img.features && img.features.skinRatio !== undefined); if (!analyizedImages.length) return; const targetImage = analyizedImages[Math.floor(Math.random() * analyizedImages.length)]; const { skinRatio } = targetImage.features; let rarity = 'NORMAL'; let rarityClass = 'gacha-spin'; if (skinRatio > 0.3) { rarity = 'SUPER RARE!!'; rarityClass += ' gacha-super-rare'; } else if (skinRatio > 0.15) { rarity = 'RARE!'; rarityClass += ' gacha-rare'; } dom.gacha.img.src = getImageUrl(targetImage); dom.gacha.rarity.textContent = rarity; dom.gacha.result.className = rarityClass; dom.gacha.overlay.classList.add('visible'); };
+        function updateFolderListUI() { const fragment = document.createDocumentFragment(); const allFolderPaths = [...state.allFolders].sort(); const createLabel = (folderPath) => { const id = `folder-${folderPath.replace(/[^a-zA-Z0-9]/g, '')}`; const label = document.createElement('label'); label.htmlFor = id; label.dataset.folderPath = folderPath; const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.id = id; checkbox.dataset.folderPath = folderPath; checkbox.checked = state.selectedFolders.has(folderPath); checkbox.onchange = (e) => { if (e.target.checked) state.selectedFolders.add(folderPath); else state.selectedFolders.delete(folderPath); if (state.isGroupingFolders) updateFolderListUI(); else e.target.parentElement.classList.toggle('selected-folder', e.target.checked); applyFiltersAndRender(); }; label.appendChild(checkbox); label.append(` ${folderPath}`); if (checkbox.checked) label.classList.add('selected-folder'); return label; }; if (state.isGroupingFolders) { const selected = allFolderPaths.filter(p => state.selectedFolders.has(p)); const unselected = allFolderPaths.filter(p => !state.selectedFolders.has(p)); selected.forEach(p => fragment.appendChild(createLabel(p))); if (selected.length > 0 && unselected.length > 0) { const divider = document.createElement('div'); divider.className = 'unselected-divider'; divider.innerHTML = '<span>未選択</span>'; fragment.appendChild(divider); } unselected.forEach(p => fragment.appendChild(createLabel(p))); } else { allFolderPaths.forEach(p => fragment.appendChild(createLabel(p))); } dom.folderList.innerHTML = ''; dom.folderList.appendChild(fragment); };
+        function updateFilenameDisplay() { let textContent = '画像なし', titleContent = '画像なし', hasImage = false; let currentImage; const { displayMode } = state; if (['folder-three', 'random-three', 'cinema-four'].includes(displayMode)) { const view = dom[displayMode.replace('-', '')]?.view || dom.folderThree.view; const imgs = view.querySelectorAll('img'); const paths = [...imgs].map(img => img.dataset.path?.split('/').pop()).filter(Boolean); if (paths.length > 0) { textContent = paths.join(', '); titleContent = paths.join('\n'); hasImage = true; const firstPath = imgs[0].dataset.path; currentImage = state.allImages.find(img => img.path === firstPath); } } else { currentImage = state.filteredImages[state.currentIndex]; if (currentImage) { const name = currentImage.path.split('/').pop(); textContent = name; titleContent = name; hasImage = true; } } dom.filenameText.textContent = textContent; dom.filenameDisplay.title = titleContent; const showButtons = hasImage ? 'block' : 'none'; dom.focusFolderBtn.style.display = showButtons; dom.excludeFolderBtn.style.display = showButtons; dom.smartGroupFocusBtn.style.display = (hasImage && state.folderKeywordMap.size > 0) ? 'block' : 'none'; };
+        function toggleSmartGroupPanel() { dom.smartGroup.toggle.classList.toggle('collapsed'); dom.smartGroup.panel.classList.toggle('collapsed'); };
+        function analyzeAndRenderGroups() { const folderPaths = Array.from(state.allFolders); if (folderPaths.length < 1) return; const MIN_KEYWORD_LENGTH = 2; const keywordStats = new Map(); for (const path of folderPaths) { const basename = path.includes('/') ? path.split('/').pop() : path; const tokens = basename.split(/[^a-zA-Zぁ-んァ-ヶ一-龠々ー]+/g).filter(t => t.length >= MIN_KEYWORD_LENGTH); if (tokens.length === 0) continue; const longestToken = tokens.reduce((a, b) => a.length >= b.length ? a : b, ''); for (const [index, token] of tokens.entries()) { if (!keywordStats.has(token)) keywordStats.set(token, { folders: new Set(), score: 0, features: new Set() }); const stats = keywordStats.get(token); stats.folders.add(path); let currentScore = 1; const features = new Set(); if (new RegExp(`[【「『\\[(<《]${token}[】」』\\])>》]`).test(basename)) { currentScore += 10; features.add('囲'); } if (token === longestToken) { currentScore += 5; features.add('長'); } if (index === 0) { currentScore += 3; features.add('先頭'); } stats.score += currentScore; features.forEach(f => stats.features.add(f)); } } const groupCandidates = []; const uniqueCandidates = []; for(const [keyword, stats] of keywordStats.entries()){ if(stats.folders.size >= 2) groupCandidates.push({ keyword, ...stats }); else if (stats.score > 1) uniqueCandidates.push({ keyword, ...stats }); } const finalGroupCandidates = []; for (const c1 of groupCandidates) { let isSubGroup = false; for (const c2 of groupCandidates) { if (c1 === c2) continue; if (c1.keyword.includes(c2.keyword) && c2.keyword.length < c1.keyword.length) { let isProperSubset = c1.folders.size < c2.folders.size; if(isProperSubset) { for (const folder of c1.folders) if (!c2.folders.has(folder)) { isProperSubset = false; break; } } if (isProperSubset) { isSubGroup = true; break; } } } if (!isSubGroup) finalGroupCandidates.push(c1); } finalGroupCandidates.sort((a, b) => b.score - a.score || b.folders.size - a.folders.size); uniqueCandidates.sort((a, b) => b.score - a.score); state.folderKeywordMap.clear(); dom.smartGroup.candidatesList.innerHTML = ''; if (finalGroupCandidates.length === 0 && uniqueCandidates.length === 0) { dom.smartGroup.candidatesList.innerHTML = '<p style="font-size:12px; text-align:center; color:#888;">特徴的なキーワードが見つかりませんでした。</p>'; return; } const renderItem = (candidate) => { const { keyword, folders, features } = candidate; state.folderKeywordMap.set(keyword, folders); const featureTags = Array.from(features).map(f => `<span class="feature-tag">${f}</span>`).join(''); const item = document.createElement('div'); item.className = 'candidate-item'; item.dataset.keyword = keyword; item.innerHTML = `<span class="candidate-keyword">${keyword} ${featureTags}</span><span class="candidate-count">(${folders.size}件)</span><div class="candidate-actions">${folders.size > 1 ? `<button data-action="select" title="このグループを選択">選択</button><button data-action="exclude" title="このグループを除外">除外</button>` : ''}<button data-action="only" title="このフォルダのみ選択">これのみ</button></div>`; return item; }; finalGroupCandidates.forEach(c => dom.smartGroup.candidatesList.appendChild(renderItem(c))); if(uniqueCandidates.length > 0 && finalGroupCandidates.length > 0) dom.smartGroup.candidatesList.innerHTML += `<div class="unique-separator"><span>ユニークキーワード (1件のみ)</span></div>`; uniqueCandidates.forEach(c => dom.smartGroup.candidatesList.appendChild(renderItem(c))); updateFilenameDisplay(); };
+        function handleCandidateActions(e) { const button = e.target.closest('button[data-action]'); if (!button) return; const action = button.dataset.action; const keyword = button.closest('.candidate-item').dataset.keyword; const targetFolders = state.folderKeywordMap.get(keyword); if (!targetFolders) return; const allCheckboxes = dom.folderList.querySelectorAll('input[type="checkbox"]'); allCheckboxes.forEach(checkbox => { const folderPath = checkbox.dataset.folderPath; if (action === 'select' && targetFolders.has(folderPath)) checkbox.checked = true; else if (action === 'exclude' && targetFolders.has(folderPath)) checkbox.checked = false; else if (action === 'only') checkbox.checked = targetFolders.has(folderPath); }); const updatedSelectedFolders = new Set(); allCheckboxes.forEach(cb => { if(cb.checked) updatedSelectedFolders.add(cb.dataset.folderPath); }); state.selectedFolders = updatedSelectedFolders; updateFolderListUI(); applyFiltersAndRender(); };
+        function handleCandidateHover(e) { const item = e.target.closest('.candidate-item'); dom.folderList.querySelectorAll('label').forEach(l => l.classList.remove('folder-highlight')); if (e.type === 'mouseover' && item) { const keyword = item.dataset.keyword; const targetFolders = state.folderKeywordMap.get(keyword); if (targetFolders) targetFolders.forEach(folderPath => { const label = dom.folderList.querySelector(`label[data-folder-path="${folderPath}"]`); if(label) label.classList.add('folder-highlight'); }); } };
+        function resetFolderSelection() { dom.folderList.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = true; state.selectedFolders.add(cb.dataset.folderPath); }); updateFolderListUI(); applyFiltersAndRender(); };
+
+        function handleFocusSmartGroup() {
+            const currentImage = state.filteredImages[state.currentIndex];
+            if (!currentImage) return;
+
+            const matchingGroups = [];
+            for (const [keyword, folders] of state.folderKeywordMap.entries()) {
+                if (folders.has(currentImage.folderPath)) {
+                    matchingGroups.push(keyword);
+                }
+            }
+
+            dom.smartGroup.focusList.innerHTML = '';
+            if (matchingGroups.length > 0) {
+                matchingGroups.forEach(keyword => {
+                    const item = document.createElement('div');
+                    item.className = 'group-item';
+                    item.textContent = keyword;
+                    item.dataset.keyword = keyword;
+                    dom.smartGroup.focusList.appendChild(item);
+                });
+            } else {
+                dom.smartGroup.focusList.innerHTML = '<p>関連グループが見つかりません。</p>';
+            }
+            dom.smartGroup.focusModal.classList.add('visible');
+        }
+
+        function handleSmartGroupFocusSelection(e) {
+            const target = e.target.closest('.group-item');
+            if (!target) return;
+            const keyword = target.dataset.keyword;
+            const targetFolders = state.folderKeywordMap.get(keyword);
+            if (!targetFolders) return;
+
+            state.selectedFolders = new Set(targetFolders);
+            dom.smartGroup.focusModal.classList.remove('visible');
+            updateFolderListUI();
+            applyFiltersAndRender();
+        }
+
+        function openZoomModal(src) { dom.zoom.img.src = src; dom.zoom.modal.classList.add('visible'); dom.zoom.img.style.transform = 'scale(1) translate(0, 0)'; };
+        function closeZoomModal() { dom.zoom.modal.classList.remove('visible'); };
+        function setupZoomPan(el) { let scale = 1, panning = false, pointX = 0, pointY = 0, start = { x: 0, y: 0 }; const setTransform = () => el.style.transform = `scale(${scale}) translate(${pointX}px, ${pointY}px)`; el.onmousedown = (e) => { e.preventDefault(); start = { x: e.clientX - pointX, y: e.clientY - pointY }; panning = true; el.style.cursor = 'grabbing'; }; el.onmouseup = () => { panning = false; el.style.cursor = 'grab'; }; el.onmousemove = (e) => { if (panning) { pointX = e.clientX - start.x; pointY = e.clientY - start.y; setTransform(); } }; el.onwheel = (e) => { e.preventDefault(); const delta = e.deltaY > 0 ? -0.2 : 0.2; scale = Math.max(1, scale + delta); setTransform(); }; };
+        function getImageUrl(image) { if (!image) return ''; if (state.urlCache.has(image.path)) return state.urlCache.get(image.path); const url = URL.createObjectURL(image.file); state.urlCache.set(image.path, url); if (state.urlCache.size > 300) { const oldest = state.urlCache.keys().next().value; URL.revokeObjectURL(state.urlCache.get(oldest)); state.urlCache.delete(oldest); } return url; };
+        function shuffleArray(array) { for (let i = array.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [array[i], array[j]] = [array[j], array[i]]; } };
+
         init();
     })();
     </script>
 </body>
-
 </html>
