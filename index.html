@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ローカルビュアーアルティメット (改 v12.4)</title>
+    <title>ローカルビュアーアルティメット (改 v12.6 STABLE)</title>
     <style>
         :root {
             --menu-width: 340px; --bg: #111; --panel-bg: rgba(20, 20, 20, 0.95);
@@ -243,10 +243,16 @@
     </div>
 
     <script>
-    const workerCode = `function rgbToHsv(r,g,b){r/=255,g/=255,b/=255;const max=Math.max(r,g,b),min=Math.min(r,g,b);let h,s,v=max;const d=max-min;if(s=0===max?0:d/max,max===min)h=0;else{switch(max){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;case b:h=(r-g)/d+4}h/=6}return{h:360*h,s:s,v:v}}function getColorCategory(r,g,b){const{h:h,s:s,v:v}=rgbToHsv(r,g,b);return s<.1?"無彩色":v<.2?"黒系":s>.8&&v>.8?h<30||h>=330?"赤系":h<60?"黄系":h<150?"緑系":h<210?"シアン系":h<270?"青系":h<330?"マゼンタ系":"-":h<30||h>=330?"茶/赤系":h<60?"黄/肌色系":h<150?"緑系":h<210?"シアン系":h<270?"青系":h<330?"紫系":"-"}self.onmessage=async({data:{files:files}})=>{let e=0;const t=files.length;for(const s of files){try{const a=await createImageBitmap(s),n=function(e){const{width:t,height:s}=e,a=t/s,n=100,o=Math.round(s*n/t),r=new OffscreenCanvas(n,o),i=r.getContext("2d"),c=.1*t,l=.1*s,h=.8*t,d=.8*s;i.drawImage(e,c,l,h,d,0,0,n,o);const m=i.getImageData(0,0,n,o).data;let p=0;const g=new Set;for(let e=0;e<m.length;e+=4){const t=m[e],s=m[e+1],a=m[e+2];t>95&&s>40&&a>20&&t>s&&t>a&&Math.abs(t-s)>15&&Math.max(t,s,a)-Math.min(t,s,a)>15&&p++;const n=getColorCategory(t,s,a);"-"!==n&&"無彩色"!==n&&g.add(n)}return{skinRatio:p/n/o,aspectRatio:a,colorCategories:Array.from(g).slice(0,2)}}(a);a.close(),self.postMessage({type:"result",path:s.webkitRelativePath,features:n})}catch(e){}e++,self.postMessage({type:"progress",processed:e,total:t})}};`;
+    // ▼ 修正点1: Workerのコードを修正し、進捗報告をより正確に
+    const workerCode = `function rgbToHsv(r,g,b){r/=255,g/=255,b/=255;const max=Math.max(r,g,b),min=Math.min(r,g,b);let h,s,v=max;const d=max-min;if(s=0===max?0:d/max,max===min)h=0;else{switch(max){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;case b:h=(r-g)/d+4}h/=6}return{h:360*h,s:s,v:v}}function getColorCategory(r,g,b){const{h:h,s:s,v:v}=rgbToHsv(r,g,b);return s<.1?"無彩色":v<.2?"黒系":s>.8&&v>.8?h<30||h>=330?"赤系":h<60?"黄系":h<150?"緑系":h<210?"シアン系":h<270?"青系":h<330?"マゼンタ系":"-":h<30||h>=330?"茶/赤系":h<60?"黄/肌色系":h<150?"緑系":h<210?"シアン系":h<270?"青系":h<330?"紫系":"-"}self.onmessage=async({data:{files,baseCount,totalFileCount}})=>{let processedInBatch=0;const totalInBatch=files.length;for(const file of files){try{const bmp=await createImageBitmap(file),features=function(e){const{width:t,height:s}=e,a=t/s,n=100,o=Math.round(s*n/t),r=new OffscreenCanvas(n,o),i=r.getContext("2d"),c=.1*t,l=.1*s,h=.8*t,d=.8*s;i.drawImage(e,c,l,h,d,0,0,n,o);const m=i.getImageData(0,0,n,o).data;let p=0;const g=new Set;for(let e=0;e<m.length;e+=4){const t=m[e],s=m[e+1],a=m[e+2];t>95&&s>40&&a>20&&t>s&&t>a&&Math.abs(t-s)>15&&Math.max(t,s,a)-Math.min(t,s,a)>15&&p++;const n=getColorCategory(t,s,a);"-"!==n&&"無彩色"!==n&&g.add(n)}return{skinRatio:p/n/o,aspectRatio:a,colorCategories:Array.from(g).slice(0,2)}}(bmp);bmp.close(),self.postMessage({type:"result",path:file.webkitRelativePath,features:features})}catch(e){console.error("Analysis failed for", file.name, e)}processedInBatch++,self.postMessage({type:"progress",processed:baseCount+processedInBatch,total:totalFileCount})}self.postMessage({type:"batch_complete"})};`;
 
     (function() {
+        // --- パフォーマンス設定 ---
         const NEAR_SQUARE_THRESHOLD = 0.1;
+        const URL_CACHE_SIZE = 50; 
+        const PRELOAD_FORWARD = 10; 
+        const PRELOAD_BACKWARD = 5;  
+        const ANALYSIS_BATCH_SIZE = 200; 
 
         const state = {
             allImages: [], filteredImages: [],
@@ -264,9 +270,14 @@
                 colorCategories: new Set(),
                 colorMatchMode: 'OR'
             },
-            urlCache: new Map(), worker: null,
+            filePathMap: new Map(), 
+            urlCache: new Map(), 
+            worker: null,
             ambiance: { currentImageIndex: 0 },
             folderKeywordMap: new Map(),
+            // ▼ 修正点1: 安定した分析のための状態管理
+            analysisFileQueue: [],
+            totalFilesForAnalysis: 0,
         };
 
         const dom = {
@@ -353,7 +364,6 @@
             dom.smartGroup.candidatesList.addEventListener('mouseout', handleCandidateHover);
             dom.smartGroup.resetBtn.addEventListener('click', resetFolderSelection);
             
-            // Generic modal close logic
             document.querySelectorAll('.modal-overlay').forEach(modal => {
                 modal.addEventListener('click', (e) => { if (e.target === modal || e.target.classList.contains('modal-close-btn')) modal.classList.remove('visible'); });
             });
@@ -399,63 +409,67 @@
 
             let nextIndex = state.currentIndex;
             const total = state.filteredImages.length;
-            let attempts = 0;
-
+            
             if (direction !== 0) {
                  nextIndex = (state.currentIndex + direction + total) % total;
             }
-
-            while (attempts < total) {
-                const image = state.filteredImages[nextIndex];
-                const mode = state.displayMode;
-
-                if (mode !== 'horizontal' && mode !== 'vertical' && mode !== 'cinema-four') {
-                    state.currentIndex = nextIndex;
-                    updateDisplay();
-                    return;
-                }
-
-                if (!image.features || image.features.aspectRatio === undefined) {
-                    try {
-                        const bmp = await createImageBitmap(image.file);
-                        const aspectRatio = bmp.width / bmp.height;
-                        if (!image.features) image.features = {};
-                        if (!image.features.hasOwnProperty('skinRatio')) {
-                           image.features.isPartial = true; 
-                        }
-                        image.features.aspectRatio = aspectRatio;
-                        bmp.close();
-                    } catch (e) {
-                        console.error("On-demand analysis failed:", image.path, e);
+            
+            // ▼ 修正点3: CPU高騰を防ぐため、探索ループは特定のモードのみに限定
+            const mode = state.displayMode;
+            if (mode === 'horizontal' || mode === 'vertical') {
+                let attempts = 0;
+                while (attempts < total) {
+                    const image = state.filteredImages[nextIndex];
+                    if (!image) { 
                         nextIndex = (nextIndex + (direction || 1) + total) % total;
                         attempts++;
                         continue;
                     }
+
+                    if (!image.features || image.features.aspectRatio === undefined) {
+                        try {
+                            const file = state.filePathMap.get(image.path);
+                            if(!file) throw new Error("File not found in map");
+                            const bmp = await createImageBitmap(file);
+                            const aspectRatio = bmp.width / bmp.height;
+                            if (!image.features) image.features = {};
+                            image.features.aspectRatio = aspectRatio;
+                            bmp.close();
+                        } catch (e) {
+                            console.error("On-demand analysis failed:", image.path, e);
+                            nextIndex = (nextIndex + (direction || 1) + total) % total;
+                            attempts++;
+                            continue;
+                        }
+                    }
+
+                    const { aspectRatio } = image.features;
+                    const isLandscape = aspectRatio >= (1 + NEAR_SQUARE_THRESHOLD);
+                    const isPortrait = aspectRatio <= (1 - NEAR_SQUARE_THRESHOLD);
+
+                    let isValid = false;
+                    if (mode === 'horizontal' && isLandscape) isValid = true;
+                    if (mode === 'vertical' && isPortrait) isValid = true;
+                    
+                    if (isValid) {
+                        state.currentIndex = nextIndex;
+                        updateDisplay();
+                        return;
+                    }
+
+                    nextIndex = (nextIndex + (direction === 0 ? 1 : direction) + total) % total;
+                    attempts++;
                 }
-
-                const { aspectRatio } = image.features;
-                const isLandscape = aspectRatio >= (1 + NEAR_SQUARE_THRESHOLD);
-                const isPortrait = aspectRatio <= (1 - NEAR_SQUARE_THRESHOLD);
-
-                let isValid = false;
-                if ((mode === 'horizontal' || mode === 'cinema-four') && isLandscape) isValid = true;
-                if (mode === 'vertical' && isPortrait) isValid = true;
-                
-                if (isValid) {
-                    state.currentIndex = nextIndex;
-                    updateDisplay();
-                    return;
-                }
-
-                nextIndex = (nextIndex + (direction === 0 ? 1 : direction) + total) % total;
-                attempts++;
+                console.warn(`No suitable image found for mode: ${mode}`);
+            } else {
+                // その他のモードでは探索ループをせず、単純にインデックスを更新
+                state.currentIndex = nextIndex;
+                updateDisplay();
             }
-            console.warn(`No suitable image found for mode: ${state.displayMode}`);
         }
 
         function updateDisplay() {
             dom.viewContainers.forEach(c => c.classList.remove('active'));
-            const { filteredImages, displayMode } = state;
             
             const renderActions = {
                 'all': renderSingleView, 'horizontal': renderSingleView, 'vertical': renderSingleView,
@@ -464,28 +478,43 @@
                 'random-three': renderRandomThreeView,
                 'cinema-four': renderCinemaFourView,
             };
-            const action = renderActions[displayMode];
-            if (action) {
-                action(filteredImages);
-            }
+            const action = renderActions[state.displayMode];
+            if (action) action(state.filteredImages);
             
             updateFilenameDisplay();
             updateStatusOverlay();
+            updatePreloadCache(); 
         }
         
         function renderSingleView(images) { dom.single.view.classList.add('active'); const image = images[state.currentIndex]; dom.single.img.src = image ? getImageUrl(image) : ''; }
         function renderAmbianceView(images) { dom.ambiance.view.classList.add('active'); if(images.length === 0) return; const currentImgEl = dom.ambiance.imgs[state.ambiance.currentImageIndex]; const nextImgEl = dom.ambiance.imgs[(state.ambiance.currentImageIndex + 1) % 2]; const nextImage = images[state.currentIndex]; if(!nextImage) return; nextImgEl.src = getImageUrl(nextImage); currentImgEl.classList.remove('visible'); nextImgEl.classList.add('visible'); state.ambiance.currentImageIndex = (state.ambiance.currentImageIndex + 1) % 2; }
         function renderFolderThreeView(images) { dom.folderThree.view.classList.add('active'); const currentImage = images[state.currentIndex]; if(!currentImage) { dom.folderThree.imgs.forEach(img => { img.src = ''; img.dataset.path = ''; }); return; } const sameFolderImages = state.allImages.filter(img => img.folderPath === currentImage.folderPath && img.path !== currentImage.path); shuffleArray(sameFolderImages); const displayImages = [currentImage, ...sameFolderImages.slice(0, 2)]; dom.folderThree.imgs.forEach((img, i) => { const image = displayImages[i]; img.src = image ? getImageUrl(image) : ''; img.dataset.path = image ? image.path : ''; }); }
         function renderRandomThreeView(images) { dom.randomThree.view.classList.add('active'); dom.randomThree.imgs.forEach((img) => { const randomImage = images.length > 0 ? images[Math.floor(Math.random() * images.length)] : null; img.src = randomImage ? getImageUrl(randomImage) : ''; img.dataset.path = randomImage ? randomImage.path : ''; }); }
-        function renderCinemaFourView(images) { dom.cinemaFour.view.classList.add('active'); const displayImages = [...images]; shuffleArray(displayImages); dom.cinemaFour.imgs.forEach((img, i) => { const image = displayImages[i]; img.src = image ? getImageUrl(image) : ''; img.dataset.path = image ? image.path : ''; }); }
         
-        function handleColorMatchModeChange(e) {
-            const button = e.target.closest('button');
-            if (!button) return;
-            state.filters.colorMatchMode = button.dataset.mode;
-            dom.colorMatchModeControls.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
-            button.classList.add('active');
+        // ▼ 修正点2: 横長4連で画像が4枚未満の時に重複表示しないように修正
+        function renderCinemaFourView(images) {
+            dom.cinemaFour.view.classList.add('active');
+            const shuffledImages = [...images];
+            shuffleArray(shuffledImages);
+
+            // 表示する画像がなければパネルをクリア
+            if (shuffledImages.length === 0) {
+                dom.cinemaFour.imgs.forEach(img => {
+                    img.src = '';
+                    img.dataset.path = '';
+                });
+                return;
+            }
+
+            dom.cinemaFour.imgs.forEach((img, i) => {
+                // 画像リストの枚数でインデックスをループさせる (例: 2枚しかない場合 0, 1, 0, 1)
+                const image = shuffledImages[i % shuffledImages.length];
+                img.src = image ? getImageUrl(image) : '';
+                img.dataset.path = image ? image.path : '';
+            });
         }
+        
+        function handleColorMatchModeChange(e) { const button = e.target.closest('button'); if (!button) return; state.filters.colorMatchMode = button.dataset.mode; dom.colorMatchModeControls.querySelectorAll('button').forEach(btn => btn.classList.remove('active')); button.classList.add('active'); }
 
         function updateColorFilterUI() {
             const images = state.allImages.filter(img => state.selectedFolders.has(img.folderPath));
@@ -494,16 +523,7 @@
             Object.entries(colorCounts).sort((a,b)=>b[1]-a[1]).forEach(([category, count]) => {
                 const wrapper = document.createElement('div'); wrapper.className = 'color-chip-wrapper'; 
                 if (state.filters.colorCategories.has(category)) wrapper.classList.add('selected');
-                
-                wrapper.onclick = () => { 
-                    if (state.filters.colorCategories.has(category)) {
-                        state.filters.colorCategories.delete(category);
-                    } else {
-                        state.filters.colorCategories.add(category);
-                    }
-                    wrapper.classList.toggle('selected');
-                };
-                
+                wrapper.onclick = () => { if (state.filters.colorCategories.has(category)) { state.filters.colorCategories.delete(category); } else { state.filters.colorCategories.add(category); } wrapper.classList.toggle('selected'); };
                 const chip = document.createElement('div'); chip.className = 'color-chip'; chip.textContent = category[0]; chip.style.background = `hsl(${Math.random()*360}, 50%, 30%)`;
                 const countSpan = document.createElement('span'); countSpan.className = 'color-count'; countSpan.textContent = `(${count})`;
                 wrapper.appendChild(chip); wrapper.append(category); wrapper.appendChild(countSpan); dom.colorFilters.appendChild(wrapper);
@@ -511,38 +531,84 @@
         }
         
         function updateStatusOverlay() { if (!state.isShowStatus) { dom.statusOverlay.style.display = 'none'; return; } const currentImage = state.filteredImages[state.currentIndex]; if (currentImage && currentImage.features) { const { skinRatio, colorCategories, aspectRatio } = currentImage.features; let html = ``; if(skinRatio !== undefined) html += `<p>肌比率: <span>${(skinRatio * 100).toFixed(1)}%</span></p>`; if(colorCategories) html += `<p>カラー: <span>${colorCategories.join(', ') || 'N/A'}</span></p>`; if(aspectRatio !== undefined) { let orientation = ''; if (aspectRatio >= (1 + NEAR_SQUARE_THRESHOLD)) orientation = '(横長)'; else if (aspectRatio <= (1 - NEAR_SQUARE_THRESHOLD)) orientation = '(縦長)'; else orientation = '(正方形に近い)'; html += `<p>比率: <span>${aspectRatio.toFixed(2)} ${orientation}</span></p>`; } if (html === '') { dom.statusOverlay.innerHTML = '<p>分析データなし</p>'; } else { dom.statusOverlay.innerHTML = html; } dom.statusOverlay.style.display = 'block'; } else { dom.statusOverlay.innerHTML = '<p>分析データなし</p>'; dom.statusOverlay.style.display = 'block'; } }
-        
         function toggleAutoHideMenu(e) { state.isAutoHideMenu = e.target.checked; if (state.isAutoHideMenu) { dom.menuToggle.style.opacity = '0'; dom.menuToggle.style.pointerEvents = 'none'; document.addEventListener('mousemove', handleMouseMoveForMenu); dom.menu.addEventListener('mouseleave', handleMouseLeaveFromMenu); } else { dom.menuToggle.style.opacity = '1'; dom.menuToggle.style.pointerEvents = 'auto'; dom.menu.classList.remove('visible'); document.removeEventListener('mousemove', handleMouseMoveForMenu); dom.menu.removeEventListener('mouseleave', handleMouseLeaveFromMenu); } }
         function handleMouseMoveForMenu(e) { if (!state.isAutoHideMenu) return; if (e.clientX < 20 && !dom.menu.classList.contains('visible')) { dom.menu.classList.add('visible'); } }
         function handleMouseLeaveFromMenu() { if (state.isAutoHideMenu && dom.menu.classList.contains('visible')) { dom.menu.classList.remove('visible'); } }
 
-        async function handleFolderSelection(e) { const files = Array.from(e.target.files).filter(f => f.size > 0 && /\.(jpg|jpeg|png|gif|webp)$/i.test(f.name)); if (!files.length) return; resetState(); state.allImages = files.map(file => { const path = file.webkitRelativePath; const folderPath = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : '(ルート)'; state.allFolders.add(folderPath); return { path, file, features: null, folderPath }; }); state.selectedFolders = new Set(state.allFolders); updateFolderListUI(); state.worker.postMessage({ files }); applyFiltersAndRender(); };
-        function handleWorkerMessage({ data }) { switch(data.type) { case 'progress': dom.progressIndicator.textContent = `分析中: ${data.processed} / ${data.total}`; break; case 'result': state.analyzedCount++; const image = state.allImages.find(img => img.path === data.path); if (image) { image.features = data.features; delete image.features.isPartial; } if (state.analyzedCount > 0) dom.gachaBtn.disabled = false; updateColorFilterUI(); break; } };
-        function handleDisplayModeChange() { state.displayMode = dom.displayModeSelect.value; applyFiltersAndRender(); };
-        function handleIntervalChange() { state.slideshowSpeed = dom.intervalSlider.value * 1000; dom.intervalValue.textContent = dom.intervalSlider.value; if (state.isSlideshow) { stopSlideshow(); startSlideshow(); } };
-        
-        function handleInvertSelection() {
-            const newSelectedFolders = new Set();
-            for (const folder of state.allFolders) {
-                if (!state.selectedFolders.has(folder)) {
-                    newSelectedFolders.add(folder);
-                }
+        async function handleFolderSelection(e) { 
+            const files = Array.from(e.target.files).filter(f => f.size > 0 && /\.(jpg|jpeg|png|gif|webp)$/i.test(f.name)); 
+            if (!files.length) return; 
+            
+            resetState(); 
+
+            state.filePathMap.clear();
+            for (const file of files) {
+                state.filePathMap.set(file.webkitRelativePath, file);
             }
-            state.selectedFolders = newSelectedFolders;
-            updateFolderListUI();
-            applyFiltersAndRender();
-        }
-        
-        function handleFocusFolder() {
-            const currentImage = state.filteredImages[state.currentIndex];
-            if (!currentImage) return;
-            state.selectedFolders = new Set([currentImage.folderPath]);
-            updateFolderListUI();
-            applyFiltersAndRender();
+            
+            state.allImages = files.map(file => { 
+                const path = file.webkitRelativePath; 
+                const folderPath = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : '(ルート)'; 
+                state.allFolders.add(folderPath); 
+                return { path, features: null, folderPath };
+            }); 
+            
+            state.selectedFolders = new Set(state.allFolders); 
+            updateFolderListUI(); 
+            
+            startBatchAnalysis(files);
+
+            applyFiltersAndRender(); 
+        };
+
+        // ▼ 修正点1: 安定した逐次バッチ処理
+        function startBatchAnalysis(files) {
+            state.analysisFileQueue = [...files];
+            state.totalFilesForAnalysis = files.length;
+            state.analyzedCount = 0; // 今回の実行での分析済みカウントをリセット
+            processNextBatch();
         }
 
+        function processNextBatch() {
+            if (state.analysisFileQueue.length === 0) {
+                console.log("Analysis complete.");
+                return;
+            }
+            const baseCount = state.totalFilesForAnalysis - state.analysisFileQueue.length;
+            const batch = state.analysisFileQueue.splice(0, ANALYSIS_BATCH_SIZE);
+            state.worker.postMessage({
+                files: batch,
+                baseCount: baseCount,
+                totalFileCount: state.totalFilesForAnalysis
+            });
+        }
+
+        function handleWorkerMessage({ data }) {
+            switch (data.type) {
+                case 'progress':
+                    dom.progressIndicator.textContent = `分析中: ${data.processed} / ${data.total}`;
+                    break;
+                case 'result':
+                    state.analyzedCount++;
+                    const image = state.allImages.find(img => img.path === data.path);
+                    if (image) {
+                        image.features = data.features;
+                    }
+                    if (state.analyzedCount > 0) dom.gachaBtn.disabled = false;
+                    updateColorFilterUI();
+                    break;
+                case 'batch_complete':
+                    processNextBatch(); // 次のバッチを処理
+                    break;
+            }
+        };
+
+        function handleDisplayModeChange() { state.displayMode = dom.displayModeSelect.value; applyFiltersAndRender(); };
+        function handleIntervalChange() { state.slideshowSpeed = dom.intervalSlider.value * 1000; dom.intervalValue.textContent = dom.intervalSlider.value; if (state.isSlideshow) { stopSlideshow(); startSlideshow(); } };
+        function handleInvertSelection() { const newSelectedFolders = new Set(); for (const folder of state.allFolders) { if (!state.selectedFolders.has(folder)) { newSelectedFolders.add(folder); } } state.selectedFolders = newSelectedFolders; updateFolderListUI(); applyFiltersAndRender(); }
+        function handleFocusFolder() { const currentImage = state.filteredImages[state.currentIndex]; if (!currentImage) return; state.selectedFolders = new Set([currentImage.folderPath]); updateFolderListUI(); applyFiltersAndRender(); }
         function handleExcludeFolder() { const currentImage = state.filteredImages[state.currentIndex]; if (!currentImage) return; state.selectedFolders.delete(currentImage.folderPath); updateFolderListUI(); applyFiltersAndRender(); };
-        function resetState() { stopSlideshow(); state.allImages = []; state.allFolders.clear(); state.selectedFolders.clear(); state.analyzedCount = 0; state.urlCache.forEach(URL.revokeObjectURL); state.urlCache.clear(); dom.gachaBtn.disabled = true; dom.filterEnableCheck.checked = false; state.isFilterEnabled = false; dom.groupFoldersToggle.checked = false; state.isGroupingFolders = false; dom.showStatusCheck.checked = false; state.isShowStatus = false; dom.autoHideMenuCheck.checked = false; if(state.isAutoHideMenu) toggleAutoHideMenu({target:{checked:false}}); state.isAutoHideMenu = false; state.filters.colorCategories.clear(); state.filters.colorMatchMode = 'OR'; dom.filterControls.classList.add('disabled'); dom.colorFilters.innerHTML = ''; dom.smartGroup.candidatesList.innerHTML = ''; state.folderKeywordMap.clear(); dom.progressIndicator.textContent = ''; };
+        function resetState() { stopSlideshow(); state.allImages = []; state.allFolders.clear(); state.selectedFolders.clear(); state.analyzedCount = 0; state.urlCache.forEach(URL.revokeObjectURL); state.urlCache.clear(); state.filePathMap.clear(); state.analysisFileQueue = []; state.totalFilesForAnalysis = 0; dom.gachaBtn.disabled = true; dom.filterEnableCheck.checked = false; state.isFilterEnabled = false; dom.groupFoldersToggle.checked = false; state.isGroupingFolders = false; dom.showStatusCheck.checked = false; state.isShowStatus = false; dom.autoHideMenuCheck.checked = false; if(state.isAutoHideMenu) toggleAutoHideMenu({target:{checked:false}}); state.isAutoHideMenu = false; state.filters.colorCategories.clear(); state.filters.colorMatchMode = 'OR'; dom.filterControls.classList.add('disabled'); dom.colorFilters.innerHTML = ''; dom.smartGroup.candidatesList.innerHTML = ''; state.folderKeywordMap.clear(); dom.progressIndicator.textContent = ''; };
         function toggleSlideshow() { if (state.isSlideshow) stopSlideshow(); else startSlideshow(); };
         function startSlideshow() { if (state.filteredImages.length < 1) return; state.isSlideshow = true; dom.playPauseBtn.textContent = '停止'; moveNext(1); state.slideshowInterval = setInterval(() => moveNext(1), state.slideshowSpeed); };
         function stopSlideshow() { clearInterval(state.slideshowInterval); state.slideshowInterval = null; state.isSlideshow = false; dom.playPauseBtn.textContent = '再生'; };
@@ -555,50 +621,59 @@
         function handleCandidateActions(e) { const button = e.target.closest('button[data-action]'); if (!button) return; const action = button.dataset.action; const keyword = button.closest('.candidate-item').dataset.keyword; const targetFolders = state.folderKeywordMap.get(keyword); if (!targetFolders) return; const allCheckboxes = dom.folderList.querySelectorAll('input[type="checkbox"]'); allCheckboxes.forEach(checkbox => { const folderPath = checkbox.dataset.folderPath; if (action === 'select' && targetFolders.has(folderPath)) checkbox.checked = true; else if (action === 'exclude' && targetFolders.has(folderPath)) checkbox.checked = false; else if (action === 'only') checkbox.checked = targetFolders.has(folderPath); }); const updatedSelectedFolders = new Set(); allCheckboxes.forEach(cb => { if(cb.checked) updatedSelectedFolders.add(cb.dataset.folderPath); }); state.selectedFolders = updatedSelectedFolders; updateFolderListUI(); applyFiltersAndRender(); };
         function handleCandidateHover(e) { const item = e.target.closest('.candidate-item'); dom.folderList.querySelectorAll('label').forEach(l => l.classList.remove('folder-highlight')); if (e.type === 'mouseover' && item) { const keyword = item.dataset.keyword; const targetFolders = state.folderKeywordMap.get(keyword); if (targetFolders) targetFolders.forEach(folderPath => { const label = dom.folderList.querySelector(`label[data-folder-path="${folderPath}"]`); if(label) label.classList.add('folder-highlight'); }); } };
         function resetFolderSelection() { dom.folderList.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = true; state.selectedFolders.add(cb.dataset.folderPath); }); updateFolderListUI(); applyFiltersAndRender(); };
-
-        function handleFocusSmartGroup() {
-            const currentImage = state.filteredImages[state.currentIndex];
-            if (!currentImage) return;
-
-            const matchingGroups = [];
-            for (const [keyword, folders] of state.folderKeywordMap.entries()) {
-                if (folders.has(currentImage.folderPath)) {
-                    matchingGroups.push(keyword);
-                }
-            }
-
-            dom.smartGroup.focusList.innerHTML = '';
-            if (matchingGroups.length > 0) {
-                matchingGroups.forEach(keyword => {
-                    const item = document.createElement('div');
-                    item.className = 'group-item';
-                    item.textContent = keyword;
-                    item.dataset.keyword = keyword;
-                    dom.smartGroup.focusList.appendChild(item);
-                });
-            } else {
-                dom.smartGroup.focusList.innerHTML = '<p>関連グループが見つかりません。</p>';
-            }
-            dom.smartGroup.focusModal.classList.add('visible');
-        }
-
-        function handleSmartGroupFocusSelection(e) {
-            const target = e.target.closest('.group-item');
-            if (!target) return;
-            const keyword = target.dataset.keyword;
-            const targetFolders = state.folderKeywordMap.get(keyword);
-            if (!targetFolders) return;
-
-            state.selectedFolders = new Set(targetFolders);
-            dom.smartGroup.focusModal.classList.remove('visible');
-            updateFolderListUI();
-            applyFiltersAndRender();
-        }
-
+        function handleFocusSmartGroup() { const currentImage = state.filteredImages[state.currentIndex]; if (!currentImage) return; const matchingGroups = []; for (const [keyword, folders] of state.folderKeywordMap.entries()) { if (folders.has(currentImage.folderPath)) { matchingGroups.push(keyword); } } dom.smartGroup.focusList.innerHTML = ''; if (matchingGroups.length > 0) { matchingGroups.forEach(keyword => { const item = document.createElement('div'); item.className = 'group-item'; item.textContent = keyword; item.dataset.keyword = keyword; dom.smartGroup.focusList.appendChild(item); }); } else { dom.smartGroup.focusList.innerHTML = '<p>関連グループが見つかりません。</p>'; } dom.smartGroup.focusModal.classList.add('visible'); }
+        function handleSmartGroupFocusSelection(e) { const target = e.target.closest('.group-item'); if (!target) return; const keyword = target.dataset.keyword; const targetFolders = state.folderKeywordMap.get(keyword); if (!targetFolders) return; state.selectedFolders = new Set(targetFolders); dom.smartGroup.focusModal.classList.remove('visible'); updateFolderListUI(); applyFiltersAndRender(); }
         function openZoomModal(src) { dom.zoom.img.src = src; dom.zoom.modal.classList.add('visible'); dom.zoom.img.style.transform = 'scale(1) translate(0, 0)'; };
         function closeZoomModal() { dom.zoom.modal.classList.remove('visible'); };
         function setupZoomPan(el) { let scale = 1, panning = false, pointX = 0, pointY = 0, start = { x: 0, y: 0 }; const setTransform = () => el.style.transform = `scale(${scale}) translate(${pointX}px, ${pointY}px)`; el.onmousedown = (e) => { e.preventDefault(); start = { x: e.clientX - pointX, y: e.clientY - pointY }; panning = true; el.style.cursor = 'grabbing'; }; el.onmouseup = () => { panning = false; el.style.cursor = 'grab'; }; el.onmousemove = (e) => { if (panning) { pointX = e.clientX - start.x; pointY = e.clientY - start.y; setTransform(); } }; el.onwheel = (e) => { e.preventDefault(); const delta = e.deltaY > 0 ? -0.2 : 0.2; scale = Math.max(1, scale + delta); setTransform(); }; };
-        function getImageUrl(image) { if (!image) return ''; if (state.urlCache.has(image.path)) return state.urlCache.get(image.path); const url = URL.createObjectURL(image.file); state.urlCache.set(image.path, url); if (state.urlCache.size > 300) { const oldest = state.urlCache.keys().next().value; URL.revokeObjectURL(state.urlCache.get(oldest)); state.urlCache.delete(oldest); } return url; };
+        
+        function getImageUrl(image) {
+            if (!image) return '';
+            if (state.urlCache.has(image.path)) {
+                return state.urlCache.get(image.path);
+            }
+            const file = state.filePathMap.get(image.path);
+            if (!file) {
+                console.error('File not found in filePathMap:', image.path);
+                return '';
+            }
+            const url = URL.createObjectURL(file);
+            state.urlCache.set(image.path, url);
+
+            if (state.urlCache.size > URL_CACHE_SIZE) {
+                const oldestKey = state.urlCache.keys().next().value;
+                URL.revokeObjectURL(state.urlCache.get(oldestKey));
+                state.urlCache.delete(oldestKey);
+            }
+            return url;
+        }
+
+        let preloadTimeout;
+        function updatePreloadCache() {
+            clearTimeout(preloadTimeout);
+            preloadTimeout = setTimeout(() => {
+                if(state.filteredImages.length === 0) return;
+                
+                const total = state.filteredImages.length;
+                const preloadSet = new Set();
+
+                for (let i = 0; i <= PRELOAD_FORWARD; i++) {
+                    const index = (state.currentIndex + i) % total;
+                    preloadSet.add(state.filteredImages[index]);
+                }
+                for (let i = 1; i <= PRELOAD_BACKWARD; i++) {
+                    const index = (state.currentIndex - i + total) % total;
+                    preloadSet.add(state.filteredImages[index]);
+                }
+
+                for (const image of preloadSet) {
+                    if (image && !state.urlCache.has(image.path)) {
+                        getImageUrl(image);
+                    }
+                }
+            }, 100); 
+        }
+        
         function shuffleArray(array) { for (let i = array.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [array[i], array[j]] = [array[j], array[i]]; } };
 
         init();
