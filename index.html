@@ -809,7 +809,7 @@
         function handleMouseLeaveFromMenu() { if (state.isAutoHideMenu && dom.menu.classList.contains('visible')) { dom.menu.classList.remove('visible'); } }
 
         async function handleFolderSelection(e) { 
-            const files = Array.from(e.target.files).filter(f => f.size > 0 && /\.(jpg|jpeg|png|gif|webp)$/i.test(f.name)); 
+            const files = Array.from(e.target.files).filter(f => f.size > 0 && /\.(jpg|jpeg|jpe|jfif|png|gif|webp|avif|heic|heif|bmp|ico)$/i.test(f.name)); 
             if (!files.length) return; 
             
             resetState(); 
